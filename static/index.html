@@ -1,0 +1,2285 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open Workbench ERP — Maliyet, BOM, Orca Slicer & AI Veri Motoru</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    dialog::backdrop { background: rgba(9, 13, 22, 0.78); backdrop-filter: blur(4px); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- ÜST BAR (SABİT HIZLI PARAMETRELER & MENÜ) -->
+  <header class="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-lg shadow-lg shadow-indigo-600/30">
+          OWB
+        </div>
+        <div>
+          <h1 class="font-bold text-lg tracking-tight flex items-center gap-2">
+            <span><span class="brand-name">Open Workbench</span> 3D ERP</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">MCP Aktif</span>
+          </h1>
+          <p class="text-xs text-slate-400">B2C & B2B Üretim, BOM Reçete, Orca Slicer G-Code & 3 Modüllü AI Maliyet Motoru</p>
+        </div>
+      </div>
+
+      <!-- Hızlı Merkezi Parametre Çubuğu -->
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="px-2.5 py-1 rounded-lg bg-slate-800 border border-amber-500/40 flex items-center gap-1.5" title="Elektrik birim fiyatı (TL/kWh)">
+          <span class="text-amber-300 font-semibold">⚡ Elektrik (TL/kWh):</span>
+          <input type="number" step="0.01" id="hdr-elec-input" class="w-16 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-center" />
+        </div>
+        <div class="px-2.5 py-1 rounded-lg bg-slate-800 border border-indigo-500/40 flex items-center gap-1.5" title="Değiştirdiğin tarihten sonraki siparişlerde geçerli olur">
+          <span class="text-indigo-300 font-semibold">🚚 Kargo (TL):</span>
+          <input type="number" step="0.5" id="hdr-ship-input" class="w-16 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-indigo-300 font-bold text-center" />
+        </div>
+        <div class="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-500/40 flex items-center gap-1.5" title="Toplam hasılat üzerinden komisyon (%)">
+          <span class="text-sky-300 font-semibold">💳 Komisyon (%):</span>
+          <input type="number" step="0.1" id="hdr-comm-input" class="w-14 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-sky-300 font-bold text-center" />
+        </div>
+        <div class="px-2.5 py-1 rounded-lg bg-slate-800 border border-emerald-500/40 flex items-center gap-1.5" title="Esnaf Vergi Muafiyeti Belgesi (GVK 9/10) banka hesabına yatan tutardan stopaj kesintisi (%4 standart, işçi varsa %2)">
+          <label class="flex items-center gap-1 cursor-pointer text-emerald-300 font-semibold">
+            <input type="checkbox" id="hdr-esnaf-chk" onchange="document.getElementById('hdr-stopaj-input').disabled = !this.checked" class="accent-emerald-500" />
+            <span>🏦 Stopaj (%):</span>
+          </label>
+          <input type="number" step="0.5" id="hdr-stopaj-input" class="w-14 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-emerald-300 font-bold text-center disabled:opacity-40" />
+        </div>
+        <button onclick="saveQuickHeaderSettings()" id="hdr-save-btn" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition shadow">
+          💾 Hızlı Kaydet
+        </button>
+        <a href="/api/export/ikas-csv" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition flex items-center gap-1 shadow">
+          <span>📥 İkas CSV</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- SEKME MENÜSÜ -->
+    <nav class="max-w-7xl mx-auto px-4 flex overflow-x-auto gap-1 border-t border-slate-800/80 pt-2">
+      <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-indigo-500 text-indigo-400 bg-slate-800/60 whitespace-nowrap">
+        📊 Genel Özet Sayfası
+      </button>
+      <button onclick="switchTab('products')" id="tab-btn-products" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        📐 Ürün Reçetesi (BOM) & G-Code
+      </button>
+      <button onclick="switchTab('quotes')" id="tab-btn-quotes" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        🤝 Teklif & B2B Hesaplayıcı
+      </button>
+      <button onclick="switchTab('inventory')" id="tab-btn-inventory" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        🧵 Hammadde & Malzeme (MCP)
+      </button>
+      <button onclick="switchTab('machines')" id="tab-btn-machines" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        🖨️ Makine & Ömürlü Parçalar
+      </button>
+      <button onclick="switchTab('orders')" id="tab-btn-orders" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        🏭 Sipariş Üretimi & Fire
+      </button>
+      <button onclick="switchTab('settings')" id="tab-btn-settings" class="tab-btn px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+        ⚙️ Parametre, Barem & Kategoriler
+      </button>
+    </nav>
+  </header>
+
+  <!-- ANA İÇERİK -->
+  <main class="max-w-7xl w-full mx-auto px-4 py-6 flex-1 space-y-6">
+
+    <!-- 1. SEKME: GENEL ÖZET SAYFASI (EXECUTIVE DASHBOARD) -->
+    <section id="tab-dashboard" class="space-y-6">
+      <!-- Hızlı Eylem Barı -->
+      <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="font-bold text-base text-white">🚀 <span class="brand-name">Open Workbench</span> Yönetim & Maliyet Özeti</h2>
+          <p class="text-xs text-slate-400">Tüm ürün reçetelerinin (BOM) başa baş noktalarını, makine saatlik giderlerini, stok değerlerini ve uyarıları tek ekrandan takip et.</p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button onclick="switchTab('products')" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition">
+            ➕ G-Code İle Yeni Ürün (BOM) Ekle
+          </button>
+          <button onclick="switchTab('quotes')" class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold transition">
+            🤝 Hızlı B2B Teklif Hesapla
+          </button>
+          <button onclick="switchTab('orders')" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition">
+            🏭 Sipariş Üretimi Gir
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 Ana KPI Kartı -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+          <div class="text-xs text-slate-400">Aktif Parkur & Ürün Kataloğu</div>
+          <div class="text-2xl font-bold mt-1 text-white" id="dash-counts">-</div>
+          <div class="text-xs text-indigo-400 mt-1" id="dash-sub-counts">-</div>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+          <div class="text-xs text-slate-400">Envanter (Stok) Toplam Değeri</div>
+          <div class="text-2xl font-bold mt-1 text-amber-400" id="dash-inv-value">0.00 TL</div>
+          <div class="text-xs text-slate-400 mt-1" id="dash-inv-sub">Filament + Yardımcı Malzeme</div>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+          <div class="text-xs text-slate-400">Toplam Sipariş Hasılatı & Süre</div>
+          <div class="text-2xl font-bold mt-1 text-sky-400" id="dash-rev">0.00 TL</div>
+          <div class="text-xs text-slate-400 mt-1" id="dash-hours">Toplam Baskı: 0.00 saat</div>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+          <div class="text-xs text-slate-400">Gerçekleşen Net Kâr</div>
+          <div class="text-2xl font-bold mt-1 text-emerald-400" id="dash-profit">0.00 TL</div>
+          <div class="text-xs text-slate-400 mt-1">Kargo, komisyon ve fire düşülmüş</div>
+        </div>
+      </div>
+
+      <!-- Esnaf Vergi Muafiyeti (GVK 9/10) Banka Stopajı & Yıllık Hasılat Limiti Takip Kartı -->
+      <div id="dash-esnaf-banner" class="hidden p-4 rounded-xl bg-emerald-950/25 border border-emerald-500/40 space-y-2 text-xs"></div>
+
+      <!-- Ürün Kataloğu Tek Bakış Maliyet / Başa Baş / Satış Fiyatı Özeti Tablosu -->
+      <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="font-bold text-base text-indigo-400">📦 Ürün Reçeteleri (BOM) Hızlı Maliyet & Fiyat Özeti</h3>
+            <p class="text-xs text-slate-400">Elektrik, kargo veya komisyon değiştiğinde buradaki tüm maliyet, başa baş ve satış fiyatları otomatik güncellenir.</p>
+          </div>
+          <button onclick="switchTab('products')" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold">Detaylı BOM Görünümüne Git →</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2.5 px-3">SKU & Ürün Adı</th>
+                <th class="py-2.5 px-3">Kategori</th>
+                <th class="py-2.5 px-3">Baskı Süresi (Ondalıklı)</th>
+                <th class="py-2.5 px-3">Net Üretim Maliyeti</th>
+                <th class="py-2.5 px-3 text-rose-300">🔴 Başa Baş (Sıfır Zarar)</th>
+                <th class="py-2.5 px-3 text-emerald-300">🟢 B2C Satış (Net Kâr)</th>
+                <th class="py-2.5 px-3 text-sky-300">🔵 B2B (10+ Birim)</th>
+                <th class="py-2.5 px-3 text-right">İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="dash-products-summary-tbody" class="divide-y divide-slate-800/70"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Makine Saatlik Giderleri & Kritik Uyarılar -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-base">🖨️ Makine Parkuru Saatlik Maliyet Özeti</h2>
+            <button onclick="switchTab('machines')" class="text-xs text-indigo-400 hover:underline">Parça Bakımı →</button>
+          </div>
+          <div id="dash-machines-list" class="space-y-3"></div>
+        </div>
+
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+          <h2 class="font-semibold text-base">⚠️ Bakım & Kritik Stok Uyarıları</h2>
+          <div id="dash-alerts" class="space-y-2 text-xs"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. SEKME: ÜRÜN REÇETESİ (BOM) & ORCA SLICER G-CODE -->
+    <section id="tab-products" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sol: Yeni Ürün & BOM Oluşturucu -->
+        <div class="lg:col-span-5 p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+          <div class="border-b border-slate-800 pb-3">
+            <h2 class="font-bold text-base text-indigo-400">➕ Yeni Ürün Reçetesi (BOM) & G-Code Aktarımı</h2>
+            <p class="text-xs text-slate-400">Orca Slicer'dan aldığın <code>.gcode</code> dosyasını yükle; süre, gramaj ve boyutlar otomatik dolsun. Fire oranı BOM kaleminde tanımlanır.</p>
+          </div>
+
+          <!-- Orca Slicer G-Code Yükleme Alanı -->
+          <div class="p-3.5 rounded-xl bg-indigo-950/30 border border-dashed border-indigo-500/50 space-y-2">
+            <label class="block text-xs font-semibold text-indigo-300">
+              📂 Orca Slicer G-Code (.gcode / .gcode.3mf) Aktar
+            </label>
+            <input type="file" id="slicer-file-input" accept=".gcode,.3mf" onchange="handleSlicerFileUpload(event)"
+              class="block w-full text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer" />
+            <div id="slicer-parse-status" class="text-xs text-emerald-400 hidden"></div>
+          </div>
+
+          <form id="product-form" onsubmit="submitProductForm(event)" class="space-y-3 text-xs">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-slate-400 block mb-1">Stok Kodu (SKU)</label>
+                <input type="text" id="p-sku" required placeholder="PRT-VAZO-002" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="text-slate-400">Kategori</label>
+                  <button type="button" onclick="toggleQuickCategoryBox('prod')" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold">+ Yeni Kategori</button>
+                </div>
+                <select id="p-category" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"></select>
+                <div id="quick-cat-prod" class="hidden mt-1.5 flex gap-1.5">
+                  <input type="text" id="quick-cat-prod-input" placeholder="Örn: B2C - Saksı" class="w-full px-2.5 py-1.5 rounded bg-slate-950 border border-indigo-500/50 text-xs" />
+                  <button type="button" onclick="addQuickCategory('PRODUCT', 'quick-cat-prod-input', 'p-category', 'quick-cat-prod')" class="px-2.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold">Ekle</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-slate-400 block mb-1">Ürün Adı</label>
+                <input type="text" id="p-name" required placeholder="Örn: Spiral Modern Masa Lambası" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Varyant (Boyut/Renk/Işık)</label>
+                <input type="text" id="p-variant" value="Standart" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700" />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Üretim Yapılacak 3D Yazıcı</label>
+              <select id="p-machine" required oninvalid="this.setCustomValidity('Birden fazla makine var, makine seçin.')" onchange="this.setCustomValidity('')" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700"></select>
+            </div>
+
+            <!-- Baskı Süresi Dönüşüm Kutusu (Saat + Dakika -> Ondalıklı Saat) -->
+            <div class="p-3 rounded-lg bg-slate-800/80 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-amber-400">⏱️ Baskı Süresi (Saat + Dakika/60)</span>
+                <span id="p-decimal-preview" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">= 3.92 saat</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-slate-400 block mb-1">Saat</label>
+                  <input type="number" id="p-hours" value="3" min="0" oninput="updateDecimalPreview()" class="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700" />
+                </div>
+                <div>
+                  <label class="text-slate-400 block mb-1">Dakika (0-59)</label>
+                  <input type="number" id="p-minutes" value="55" min="0" max="59" oninput="updateDecimalPreview()" class="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Boyutlar X-Y-Z mm -->
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="text-slate-400 block mb-1">X Genişlik (mm)</label>
+                <input type="number" step="0.1" id="p-x" value="150" class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Y Derinlik (mm)</label>
+                <input type="number" step="0.1" id="p-y" value="150" class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Z Yükseklik (mm)</label>
+                <input type="number" step="0.1" id="p-z" value="220" class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+              </div>
+            </div>
+
+            <!-- BOM Filament Satırları -->
+            <div class="p-3 rounded-lg bg-slate-800/70 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-indigo-300">🧵 Kullanılan Filament(ler) & BOM Fire (%)</span>
+                <button type="button" onclick="addBomFilamentRow()" class="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 font-medium">
+                  + Filament Ekle
+                </button>
+              </div>
+              <div id="bom-filaments-container" class="space-y-2"></div>
+            </div>
+
+            <!-- BOM Ek Bileşen / Sarf Satırları -->
+            <div class="p-3 rounded-lg bg-slate-800/70 border border-slate-700 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-emerald-300">💡 Ek Bileşenler (LED, Duy, Kutu) & Fire (%)</span>
+                <button type="button" onclick="addBomMaterialRow()" class="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 font-medium">
+                  + Bileşen Ekle
+                </button>
+              </div>
+              <div id="bom-materials-container" class="space-y-2"></div>
+            </div>
+
+            <!-- BOM Ambalaj / Malzeme Grupları (Alt BOM) -->
+            <div class="p-3 rounded-lg bg-amber-950/20 border border-amber-500/40 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-amber-300">📦 Ambalaj & Malzeme Grubu (Alt BOM)</span>
+                <button type="button" onclick="addBomGroupRow()" class="px-2 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 font-medium">
+                  + Ambalaj Grubu Ekle
+                </button>
+              </div>
+              <div id="bom-groups-container" class="space-y-2"></div>
+            </div>
+
+            <!-- Kargo Baremi, Hedef Kâr Marjı & KDV Şalteri -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-slate-400 block mb-1">Kargo Baremi</label>
+                <select id="p-shipping-tier" class="w-full px-2.5 py-2 rounded bg-slate-800 border border-slate-700"></select>
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Hedef Kâr Marjı (%)</label>
+                <input type="number" step="0.5" id="p-margin" value="50" class="w-full px-2.5 py-2 rounded bg-slate-800 border border-slate-700 font-bold text-emerald-400" />
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-800 border border-slate-700">
+              <div>
+                <span class="font-semibold block">KDV Eklensin mi? (Matrah Üzerinden)</span>
+                <span class="text-[11px] text-slate-400">Açılırsa her şeyden sonra toplam matrah üstüne KDV eklenir.</span>
+              </div>
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="p-vat-enabled" class="sr-only peer" />
+                <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 space-y-2">
+              <div class="font-semibold">İstasyon</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-slate-400 block mb-1">Ürün tipi</label>
+                  <select id="p-urun-tipi" onchange="urunTipiDegisti()" class="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700">
+                    <option value="STANDART">Standart</option>
+                    <option value="KISIYE_OZEL">Kişiye özel</option>
+                  </select>
+                </div>
+                <label class="flex items-center gap-2 mt-5 cursor-pointer">
+                  <input type="checkbox" id="p-gozetimsiz" class="w-4 h-4 accent-indigo-600" />
+                  <span>Gözetimsiz baskıya izin ver</span>
+                </label>
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Model dosyasının yolu (STL / 3MF)</label>
+                <input type="text" id="p-stl-path" placeholder="~/3d-products/<sku>/model.stl" class="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700" />
+              </div>
+              <p class="text-[11px] text-slate-400">Onaylı G-code, ürün kaydedildikten sonra katalogdaki "G-code onayla" düğmesiyle bağlanır. Kişiye özel ürün gözetimsiz basılmaz.</p>
+            </div>
+
+            <div>
+              <label class="text-slate-400 block mb-1">Üretim / Slicer Notu</label>
+              <input type="text" id="p-notes" placeholder="Örn: 0.20mm katman, %15 Gyroid dolgu" class="w-full px-3 py-1.5 rounded bg-slate-800 border border-slate-700" />
+            </div>
+
+            <button type="button" id="product-edit-cancel" hidden onclick="cancelProductEdit()" class="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold">Düzenlemeyi İptal Et</button>
+            <button type="submit" id="product-save-btn" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-600/30 transition">
+              💾 Ürün Reçetesini (BOM) Kaydet ve Fiyatı Hesapla
+            </button>
+          </form>
+        </div>
+
+        <!-- Sağ: Ürün Katalog Listesi, Başa Baş Noktası ve AI Çıktı Butonları -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="font-bold text-base">📦 Ürün Kataloğu, Başa Baş Analizi & AI Veri Paketleri</h2>
+            <span class="text-xs text-slate-400">Her üründe KDV'yi tek tıkla açıp kapatabilirsin</span>
+          </div>
+          <div id="products-list" class="space-y-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. SEKME: HIZLI TEKLİF HESAPLAYICI (QUOTATION - BAŞA BAŞ & İSKONTO & KDV BUTONU) -->
+    <section id="tab-quotes" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-6 p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+          <h2 class="font-bold text-base text-indigo-400">🤝 B2B / Özel Tasarım Teklif & Başa Baş Hesaplayıcı</h2>
+          <p class="text-xs text-slate-400">
+            Sipariş adedini girdiğinde <strong>B2B İskonto Baremin</strong> otomatik seçilir (istersen elle de değiştirebilirsin). Sistem sana <strong>Sıfır Zarar (Başa Baş) Noktasını</strong> ve net kârını anında verir.
+          </p>
+
+          <!-- Teklif Ekranı İçin Orca Slicer G-Code Yükleyici -->
+          <div class="p-3 rounded-xl bg-indigo-950/30 border border-dashed border-indigo-500/50 space-y-1.5">
+            <label class="block text-xs font-semibold text-indigo-300">
+              📂 Teklif İçin .gcode / .gcode.3mf Yükle (Birim Süre & Gramajı Otomatik Doldurur)
+            </label>
+            <input type="file" accept=".gcode,.3mf" onchange="handleQuoteSlicerUpload(event)"
+              class="block w-full text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer" />
+            <div id="quote-slicer-status" class="text-xs text-emerald-400 hidden"></div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <label class="text-slate-400 block mb-1">Müşteri / Kurum Adı</label>
+              <input type="text" id="q-customer" value="Kurumsal Firma A.Ş." oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Proje / Ürün Başlığı</label>
+              <input type="text" id="q-title" value="3D Işıklı Masaüstü Kurumsal Logo" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Sipariş Adedi (Baremi Otomatik Seçer)</label>
+              <input type="number" id="q-qty" value="25" min="1" oninput="onQuoteQtyChange()" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 font-bold text-white" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Yazıcı Seçimi</label>
+              <select id="q-machine" onchange="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Birim Baskı Süresi (Saat)</label>
+              <input type="number" id="q-hours" value="2" min="0" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Birim Baskı Süresi (Dakika)</label>
+              <input type="number" id="q-minutes" value="30" min="0" max="59" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Filament Seçimi</label>
+              <select id="q-filament" onchange="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Birim Net Gramaj (gr) & BOM Fire (%)</label>
+              <div class="flex gap-2">
+                <input type="number" id="q-grams" value="95" oninput="runQuoteCalc(false)" class="w-2/3 px-2.5 py-2 rounded bg-slate-800 border border-slate-700" placeholder="Gram" />
+                <input type="number" id="q-waste" value="5" oninput="runQuoteCalc(false)" class="w-1/3 px-2 py-2 rounded bg-slate-800 border border-amber-500/40 text-amber-300" title="BOM Fire %" />
+              </div>
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Birim Ek Malzeme/LED/Kutu (TL)</label>
+              <input type="number" id="q-extra" value="35" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1">Toplam Kargo / Lojistik (TL)</label>
+              <input type="number" id="q-shipping" value="145" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            </div>
+            <div>
+              <label class="text-emerald-400 font-semibold block mb-1">🎯 Hedef Kâr Marjı (%)</label>
+              <input type="number" id="q-margin" value="45" step="1" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-emerald-500/50 font-bold text-emerald-400" />
+            </div>
+            <div>
+              <label class="text-amber-400 font-semibold block mb-1">🏷️ Müşteri İskonto Oranı (%) <span id="q-matched-tier-badge" class="text-[10px] text-sky-400 font-normal"></span></label>
+              <input type="number" id="q-discount" value="18" step="0.5" oninput="runQuoteCalc(false)" class="w-full px-3 py-2 rounded bg-slate-800 border border-amber-500/50 font-bold text-amber-400" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+            <div>
+              <span class="font-semibold block text-white">Teklifte KDV Olsun mu? (Matrah Üzerinden)</span>
+              <span class="text-slate-400">Açıldığında toplam matrah üzerinden KDV eklenir.</span>
+            </div>
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="q-vat" onchange="runQuoteCalc(false)" class="sr-only peer" />
+              <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+          <button onclick="runQuoteCalc(true)" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">
+            📌 Bu Teklifi Kaydet
+          </button>
+        </div>
+
+        <!-- Sağ: Canlı Teklif & Başa Baş Analiz Kartı + B2B Baremleri Hızlı Seçim -->
+        <div class="lg:col-span-6 space-y-4">
+          <div id="quote-result-card" class="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-5"></div>
+
+          <div class="p-5 rounded-xl bg-slate-900 border border-sky-500/40 space-y-3 text-xs">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-sm text-sky-400">🏷️ B2B Toplu Alım İskonto Baremleri</h3>
+                <p class="text-slate-400 text-[11px]">İskonto yüzdelerini buradan anında değiştirebilir veya yeni barem için Ayarlar sekmesini kullanabilirsin.</p>
+              </div>
+              <button onclick="switchTab('settings')" class="text-sky-400 hover:underline font-semibold">+ Yeni Barem Ekle →</button>
+            </div>
+            <div id="quote-b2b-tiers-list" class="space-y-2"></div>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3 text-xs">
+            <h3 class="font-bold text-sm text-white">📁 Kayıtlı Teklifler</h3>
+            <div id="saved-quotes-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. SEKME: HAMMADDE (FİLAMENT) & YARDIMCI MALZEME ENVANTERİ + MCP -->
+    <section id="tab-inventory" class="hidden space-y-6">
+      <div class="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/40 flex flex-wrap items-center justify-between gap-4">
+        <div class="space-y-1">
+          <div class="text-sm font-bold text-indigo-300">🤖 Yapay Zeka (MCP) İle Doğrudan Malzeme Girişi Aktif</div>
+          <p class="text-xs text-slate-300">
+            Malzemelerin kendisinde fire oranı tutulmaz (saf birim maliyet tutulur; fire oranı BOM'da verilir). Yapay zekaya doğrudan
+            <code class="text-indigo-200 bg-slate-900 px-1.5 py-0.5 rounded">"Elimdeki şu filamentleri ve malzemeleri ERP'ye gir"</code> diyebilirsin.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Filament Envanteri -->
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+          <h3 class="font-bold text-base text-indigo-400">🧵 Filament Envanteri (Firesiz Saf Maliyet)</h3>
+          <form onsubmit="submitFilament(event)" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+            <input type="text" id="f-code" required placeholder="Kod (FIL-PLA-01)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="text" id="f-brand" required placeholder="Marka" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="text" id="f-type" required placeholder="Tür (PLA+/PETG)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="text" id="f-color" required placeholder="Renk Adı" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="number" step="0.01" id="f-price" required placeholder="Kg Fiyatı (TL)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="number" step="1" id="f-rem" value="1000" placeholder="Kalan Gram (gr)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <button type="submit" class="col-span-2 sm:col-span-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">
+              + Filament Ekle
+            </button>
+          </form>
+          <div id="filaments-table" class="space-y-2 text-xs"></div>
+        </div>
+
+        <!-- Yardımcı Malzeme & Sarf Envanteri -->
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-base text-emerald-400">💡 Ek Bileşen & Sarf Envanteri (LED, Duy, Kutu, Patpat)</h3>
+            <button type="button" onclick="toggleQuickCategoryBox('mat')" class="text-xs text-emerald-400 hover:text-emerald-300 font-semibold">+ Yeni Kategori</button>
+          </div>
+          <div id="quick-cat-mat" class="hidden flex gap-2 bg-slate-800/80 p-2.5 rounded-lg border border-emerald-500/40 text-xs">
+            <input type="text" id="quick-cat-mat-input" placeholder="Yeni malzeme kategorisi (Örn: BOYA / VERNİK)" class="w-full px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700" />
+            <button type="button" onclick="addQuickCategory('MATERIAL', 'quick-cat-mat-input', 'm-cat', 'quick-cat-mat')" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold whitespace-nowrap">Ekle</button>
+          </div>
+          <form onsubmit="submitMaterial(event)" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+            <input type="text" id="m-code" required placeholder="Kod (MAT-KUTU-01)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="text" id="m-name" required placeholder="Malzeme Adı" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 sm:col-span-2" />
+            <select id="m-cat" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700"></select>
+            <input type="text" id="m-unit" value="adet" placeholder="Birim (adet/metre)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="number" step="0.01" id="m-cost" required placeholder="Birim Maliyet (TL)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="number" step="1" id="m-stock" value="50" placeholder="Stok Miktarı" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <button type="submit" class="col-span-2 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
+              + Yardımcı Malzeme Ekle
+            </button>
+          </form>
+          <div id="materials-table" class="space-y-2 text-xs"></div>
+        </div>
+      </div>
+
+      <!-- Ambalaj & Malzeme Grupları (Alt BOM Paketleri) -->
+      <div class="p-5 rounded-xl bg-slate-900 border border-amber-500/40 space-y-4 text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div>
+            <h3 class="font-bold text-base text-amber-400">📦 Ambalaj & Malzeme Grupları (Alt BOM Paketleri)</h3>
+            <p class="text-slate-400">Örn: <code>Ambalaj_Kucuk</code>, <code>Ambalaj_Orta</code>, <code>Ambalaj_Buyuk</code> gibi birden fazla yardımcı malzemeden oluşan setler oluşturup doğrudan ürün reçetelerine (BOM) bağlayabilirsin.</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <form id="material-group-form" onsubmit="submitMaterialGroup(event)" class="lg:col-span-5 space-y-2.5 bg-slate-800/60 p-4 rounded-xl border border-slate-700">
+            <div class="font-bold text-amber-300">➕ Ambalaj / Malzeme Grubu Oluştur veya Güncelle</div>
+            <div class="grid grid-cols-2 gap-2">
+              <input type="text" id="grp-code" required placeholder="Grup Kodu (Örn: Ambalaj_Kucuk)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 font-mono" />
+              <input type="text" id="grp-name" required placeholder="Grup Adı (Küçük Ambalaj Seti)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            </div>
+            <input type="text" id="grp-desc" placeholder="Açıklama (Örn: 20x15x10 kutu + delikli kraft + etiket)" class="w-full px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <div class="space-y-1.5 pt-1">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-slate-300">İçerdiği Malzemeler:</span>
+                <button type="button" onclick="addGroupItemRow()" class="px-2 py-1 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 font-medium">+ Malzeme Satırı</button>
+              </div>
+              <div id="grp-items-container" class="space-y-1.5"></div>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button type="submit" class="flex-1 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold">💾 Grubu Kaydet / Güncelle</button>
+              <button type="button" onclick="resetMaterialGroupForm()" class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">Temizle</button>
+            </div>
+          </form>
+          <div id="material-groups-list" class="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-3 content-start"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SEKME: MAKİNE PARKURU & ÖMÜRLÜ PARÇALAR -->
+    <section id="tab-machines" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-4 space-y-4">
+          <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3 text-xs">
+            <h3 class="font-bold text-sm text-indigo-400">➕ Yeni 3D Yazıcı Ekle</h3>
+            <form onsubmit="submitMachine(event)" class="space-y-2.5">
+              <input type="text" id="mac-name" required placeholder="Makine Adı (Örn: Bambu Lab P1S #2)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              <input type="text" id="mac-model" required placeholder="Model (ör. Elegoo Centauri Carbon)" value="" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-slate-400 block mb-1">Alış Bedeli (TL)</label>
+                  <input type="number" id="mac-price" value="42000" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+                <div>
+                  <label class="text-slate-400 block mb-1">Toplam Ömür (Saat)</label>
+                  <input type="number" id="mac-life" value="5000" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-slate-400 block mb-1">Ortalama Elektrik Tüketimi (kW)</label>
+                  <input type="number" step="0.01" id="mac-kw" value="0.12" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+                <div>
+                  <label class="text-slate-400 block mb-1">Filament Yuva Sayısı (1-4)</label>
+                  <input type="number" id="mac-slots" value="4" min="1" max="4" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+              </div>
+              <button type="submit" class="w-full py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">
+                Yazıcıyı Kaydet
+              </button>
+            </form>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3 text-xs">
+            <h3 class="font-bold text-sm text-amber-400">⚙️ Makineye Ömürlü Parça Ekle</h3>
+            <form onsubmit="submitMachinePart(event)" class="space-y-2.5">
+              <select id="mp-machine" required oninvalid="this.setCustomValidity('Birden fazla makine var, makine seçin.')" onchange="this.setCustomValidity('')" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+              <input type="text" id="mp-name" required placeholder="Parça Adı (Örn: 0.4mm Nozzle, PEI Tabla)" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-slate-400 block mb-1">Parça Bedeli (TL)</label>
+                  <input type="number" id="mp-cost" value="750" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+                <div>
+                  <label class="text-slate-400 block mb-1">Tahmini Ömrü (Saat)</label>
+                  <input type="number" id="mp-life" value="600" required class="w-full px-2.5 py-1.5 rounded bg-slate-800 border border-slate-700" />
+                </div>
+              </div>
+              <button type="submit" class="w-full py-2 rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold">
+                Ömürlü Parça Ekle
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="lg:col-span-8 space-y-4" id="machines-detail-list"></div>
+      </div>
+    </section>
+
+    <!-- 6. SEKME: SİPARİŞ ÜRETİMİ & FİRE KAYDI -->
+    <section id="tab-orders" class="hidden space-y-6">
+      <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 text-xs">
+        <h3 class="font-bold text-base text-amber-300">🖨️ Baskı Kuyruğu</h3>
+        <p class="text-slate-400">Sipariş burada emir olarak açılır; stok ve makine saati "Basıldı" denince düşer. Kişiye özel üründe müşterinin metni yazılır ve emir önce müşteri onayını, sonra dilimlemeyi bekler.</p>
+        <form onsubmit="submitQueueItem(event)" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <div class="md:col-span-4">
+            <label class="text-slate-400 block mb-1">Ürün</label>
+            <select id="q-product" required class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+          </div>
+          <div class="md:col-span-1">
+            <label class="text-slate-400 block mb-1">Adet</label>
+            <input type="number" id="q-qty" value="1" min="1" required class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+          </div>
+          <div class="md:col-span-3">
+            <label class="text-slate-400 block mb-1">Müşteri metni (kişiye özel)</label>
+            <input type="text" id="q-metin" placeholder="Örn: Öykü Çağla" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="text-slate-400 block mb-1">Not / sipariş no</label>
+            <input type="text" id="q-notes" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+          </div>
+          <button type="submit" class="md:col-span-2 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold">Emir aç</button>
+        </form>
+        <div id="queue-list" class="space-y-2"></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 text-xs">
+          <h3 class="font-bold text-base text-emerald-400">🏭 Sipariş Üretimi Tamamla (Stok & Ömür Düş)</h3>
+          <p class="text-slate-400">
+            Sipariş üretildiğinde o günkü kargo baremi, elektrik ve komisyon değerleri <strong>Snapshot</strong> olarak kilitlenir; makine/parça ömründen ondalıklı saat ve stoklardan BOM miktarları otomatik düşülür.
+          </p>
+          <form onsubmit="submitProductionOrder(event)" class="space-y-3">
+            <div>
+              <label class="text-slate-400 block mb-1">Üretilen Ürün</label>
+              <select id="ord-product" required class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-slate-400 block mb-1">Üretim Makinesi</label>
+                <select id="ord-machine" required oninvalid="this.setCustomValidity('Birden fazla makine var, makine seçin.')" onchange="this.setCustomValidity('')" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700"></select>
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Adet</label>
+                <input type="number" id="ord-qty" value="1" min="1" required class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 font-bold" />
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-2.5 rounded bg-slate-800 border border-slate-700">
+              <span class="font-semibold">Bu Siparişte KDV Var mı?</span>
+              <input type="checkbox" id="ord-vat" class="w-4 h-4 accent-indigo-600" />
+            </div>
+            <input type="text" id="ord-notes" placeholder="Sipariş Notu / Mağaza Sipariş No" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+            <button type="submit" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
+              ✅ Üretimi Kaydet (Stoktan ve Parça Ömründen Düş)
+            </button>
+          </form>
+        </div>
+
+        <div class="lg:col-span-7 p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+          <h3 class="font-bold text-base">📜 Geçmiş Üretim & Sipariş Kayıtları (Tarihsel Snapshot)</h3>
+          <div id="orders-list" class="space-y-2 text-xs"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. SEKME: GENEL PARAMETRELER, KARGO BAREMİ, B2B BAREMLERİ & KATEGORİLER -->
+    <section id="tab-settings" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 text-xs">
+          <h3 class="font-bold text-base text-indigo-400">⚙️ Merkezi Genel Parametreler</h3>
+          <p class="text-slate-400">Buradaki bir değişiklik tüm makinelerin saatlik elektrik giderini ve ürün reçetelerinin (BOM) maliyet/fiyatlarını anında günceller.</p>
+          <form onsubmit="submitSettings(event)" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-slate-400 block mb-1">Marka Adı</label>
+                <input type="text" id="set-brand" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-amber-400 font-semibold block mb-1">⚡ Elektrik Birim Fiyatı (TL/kWh)</label>
+                <input type="number" step="0.01" id="set-elec" class="w-full px-3 py-2 rounded bg-slate-800 border border-amber-500/50 font-bold text-amber-300" />
+              </div>
+              <div>
+                <label class="text-sky-400 font-semibold block mb-1">💳 Komisyon Oranı (% - Hasılat Üzerinden)</label>
+                <input type="number" step="0.1" id="set-comm" class="w-full px-3 py-2 rounded bg-slate-800 border border-sky-500/50 font-bold text-sky-300" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Varsayılan Kargo Bedeli (TL)</label>
+                <input type="number" step="0.5" id="set-ship" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1" title="Sipariş bu tutara ulaşınca kargoyu sen ödersin, altında müşteri öder">Kargo Eşiği (TL)</label>
+                <input type="number" step="1" id="set-kargo-esik" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Varsayılan KDV Oranı (%)</label>
+                <input type="number" step="1" id="set-vat-rate" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div>
+                <label class="text-slate-400 block mb-1">Varsayılan B2C Hedef Kâr Marjı (%)</label>
+                <input type="number" step="1" id="set-margin" class="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700" />
+              </div>
+              <div class="col-span-2 p-3 rounded-lg bg-emerald-950/25 border border-emerald-500/40 space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <span class="font-bold text-emerald-300 block">🏛️ Esnaf Vergi Muafiyeti Belgesi (GVK Mükerrer 9/10)</span>
+                    <span class="text-[11px] text-slate-400">Banka hesabına para aktarıldığında kesilen stopaj (%4 standart, işçi varsa %2) ve yıllık hasılat limiti.</span>
+                  </div>
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="set-esnaf-enabled" class="sr-only peer" />
+                    <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-emerald-300 font-semibold block mb-1">🏦 Banka Stopaj Oranı (%)</label>
+                    <input type="number" step="0.5" id="set-stopaj" class="w-full px-3 py-2 rounded bg-slate-900 border border-emerald-500/40 text-emerald-300 font-bold" />
+                  </div>
+                  <div>
+                    <label class="text-slate-300 block mb-1">📊 Yıllık Hasılat Sınırı (2026: 1.900.000 TL)</label>
+                    <input type="number" step="1000" id="set-esnaf-limit" class="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-white font-semibold" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+              💾 Parametreleri Güncelle (Tüm Ürünleri Yeniden Hesapla)
+            </button>
+          </form>
+        </div>
+
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 text-xs">
+          <h3 class="font-bold text-base text-amber-400">🚚 Kargo Baremleri (Tarihçeli)</h3>
+          <p class="text-slate-400">Kargo barem fiyatını değiştirdiğin tarihten sonraki yeni siparişlerde yeni fiyat geçerli olur; geçmiş siparişlerin kargo maliyeti bozulmaz.</p>
+          <form onsubmit="submitShippingRate(event)" class="grid grid-cols-3 gap-2 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+            <input type="text" id="sr-name" required placeholder="Barem Adı (Örn: 2-5 Desi)" class="col-span-2 px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <input type="number" step="0.5" id="sr-cost" required placeholder="Tutar (TL)" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700" />
+            <button type="submit" class="col-span-3 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold">
+              + Yeni Kargo Baremi Ekle / Güncelle
+            </button>
+          </form>
+          <div id="shipping-rates-list" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- B2B TOPLU ALIM İSKONTO BAREMLERİ YÖNETİM PANELİ -->
+      <div class="p-5 rounded-xl bg-slate-900 border border-sky-500/40 space-y-4 text-xs">
+        <div>
+          <h3 class="font-bold text-base text-sky-400">🏷️ B2B Toplu Alım İskonto Baremleri (Adet Aralığı & İskonto %)</h3>
+          <p class="text-slate-400">Kurumsal (B2B) ve toplu siparişlerde adet aralıklarına göre uygulanacak iskonto oranlarını buradan yönetebilirsin.</p>
+        </div>
+        <form onsubmit="submitB2BTier(event)" class="grid grid-cols-1 sm:grid-cols-5 gap-2 bg-slate-800/60 p-3 rounded-lg border border-slate-700">
+          <input type="text" id="set-bt-name" required placeholder="Barem Adı (Örn: Kurumsal Bronz)" class="sm:col-span-2 px-3 py-2 rounded bg-slate-900 border border-slate-700" />
+          <input type="number" id="set-bt-min" required placeholder="Min Adet (Örn: 10)" class="px-3 py-2 rounded bg-slate-900 border border-slate-700" />
+          <input type="number" id="set-bt-max" placeholder="Max Adet (Boş = Sınırsız)" class="px-3 py-2 rounded bg-slate-900 border border-slate-700" />
+          <div class="flex gap-2">
+            <input type="number" step="0.5" id="set-bt-disc" required placeholder="İskonto %" class="w-full px-3 py-2 rounded bg-slate-900 border border-amber-500/50 text-amber-300 font-bold" />
+            <button type="submit" class="px-4 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold whitespace-nowrap">+ Ekle</button>
+          </div>
+        </form>
+        <div id="settings-b2b-tiers-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+      </div>
+
+      <!-- KATEGORİ YÖNETİM PANELİ (ÜRÜN & MALZEME KATEGORİLERİ) -->
+      <div class="p-5 rounded-xl bg-slate-900 border border-indigo-500/40 space-y-4 text-xs">
+        <div>
+          <h3 class="font-bold text-base text-indigo-400">📁 Ürün & Yardımcı Malzeme Kategorileri Yönetimi</h3>
+          <p class="text-slate-400">Ürün reçetelerinde (BOM) ve yardımcı malzeme envanterinde kullanacağın özel kategorileri buradan ekleyip silebilirsin.</p>
+        </div>
+        <form onsubmit="submitCategoryFromSettings(event)" class="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-800/60 p-3 rounded-lg border border-slate-700">
+          <select id="cat-scope" class="px-3 py-2 rounded bg-slate-900 border border-slate-700">
+            <option value="PRODUCT">📦 Ürün Kategorisi (BOM)</option>
+            <option value="MATERIAL">💡 Malzeme / Sarf Kategorisi</option>
+          </select>
+          <input type="text" id="cat-name" required placeholder="Kategori Adı (Örn: B2C - Saksı & Bitki)" class="sm:col-span-2 px-3 py-2 rounded bg-slate-900 border border-slate-700" />
+          <button type="submit" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold">+ Kategori Ekle</button>
+        </form>
+        <div id="settings-categories-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODÜL 1-2-3 AI PAKETİ MODAL (<dialog>) -->
+  <dialog id="ai-modal" class="w-full max-w-3xl rounded-2xl bg-slate-900 text-slate-100 border border-slate-700 p-0 shadow-2xl">
+    <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+      <div>
+        <h3 class="font-bold text-base text-indigo-400">🤖 Modül 1-2-3 Yapay Zeka (Claude Pro & Google AI Pro) Veri Paketi</h3>
+        <p class="text-xs text-slate-400">Bu metni tek tıkla kopyalayıp Claude Pro Project ekranına yapıştırabilirsin.</p>
+      </div>
+      <button onclick="document.getElementById('ai-modal').close()" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs">Kapat ✕</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <textarea id="ai-prompt-textarea" rows="16" readonly class="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200"></textarea>
+      <div class="flex justify-end gap-3">
+        <button onclick="copyAiPrompt()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+          📋 Komut ve Veri Paketini Kopyala
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const STATE = {
+      settings: {},
+      shippingRates: [],
+      b2bTiers: [],
+      categories: [],
+      machines: [],
+      filaments: [],
+      materials: [],
+      materialGroups: [],
+      products: [],
+      orders: [],
+      quotes: [],
+      queue: [],
+      editingProductId: null,
+      uploadedThumbnail: null,
+      uploadedFilename: null,
+    };
+
+    function switchTab(tabId) {
+      document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-indigo-500', 'text-indigo-400', 'bg-slate-800/60');
+        b.classList.add('border-transparent', 'text-slate-400');
+      });
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('border-indigo-500', 'text-indigo-400', 'bg-slate-800/60');
+        activeBtn.classList.remove('border-transparent', 'text-slate-400');
+      }
+      if (tabId === 'quotes') runQuoteCalc(false);
+    }
+
+    function updateDecimalPreview() {
+      const h = parseInt(document.getElementById('p-hours').value || '0', 10);
+      const m = parseInt(document.getElementById('p-minutes').value || '0', 10);
+      document.getElementById('p-decimal-preview').textContent = `= ${(h + m / 60).toFixed(2)} saat`;
+    }
+
+    async function loadAllData() {
+      const [dashRes, setRes, macRes, filRes, matRes, grpRes, prodRes, ordRes, quoteRes] = await Promise.all([
+        fetch('/api/dashboard').then(r => r.json()),
+        fetch('/api/settings').then(r => r.json()),
+        fetch('/api/machines').then(r => r.json()),
+        fetch('/api/filaments').then(r => r.json()),
+        fetch('/api/materials').then(r => r.json()),
+        fetch('/api/material-groups').then(r => r.json()).catch(() => []),
+        fetch('/api/products').then(r => r.json()),
+        fetch('/api/orders').then(r => r.json()),
+        fetch('/api/quotes').then(r => r.json()),
+      ]);
+      STATE.queue = await fetch('/api/queue').then(r => r.json()).catch(() => []);
+
+      STATE.settings = setRes.settings;
+      STATE.shippingRates = setRes.shipping_rates || [];
+      STATE.b2bTiers = setRes.b2b_tiers || [];
+      STATE.categories = setRes.categories || [];
+      STATE.machines = macRes || [];
+      STATE.filaments = filRes || [];
+      STATE.materials = matRes || [];
+      STATE.materialGroups = grpRes || [];
+      STATE.products = prodRes || [];
+      STATE.orders = ordRes || [];
+      STATE.quotes = quoteRes || [];
+
+      renderHeaderAndSettings();
+      renderDashboard(dashRes);
+      renderSelectOptions();
+      renderProducts();
+      renderInventory();
+      renderMachines();
+      renderOrders();
+      renderQueue();
+      renderSavedQuotes();
+      const qSel = document.getElementById('q-product');
+      const onceki = qSel.value;
+      qSel.innerHTML = STATE.products.map(p => `<option value="${p.product_id}">${p.sku} — ${p.name}${p.urun_tipi === 'KISIYE_OZEL' ? ' (kişiye özel)' : ''}</option>`).join('');
+      if (onceki) qSel.value = onceki;
+    }
+
+    function renderHeaderAndSettings() {
+      const s = STATE.settings;
+      document.getElementById('hdr-elec-input').value = s.electricity_price_per_kwh;
+      document.getElementById('hdr-ship-input').value = s.default_shipping_cost;
+      document.getElementById('hdr-comm-input').value = s.commission_rate_percent;
+      document.getElementById('hdr-esnaf-chk').checked = !!s.esnaf_muafiyeti_enabled;
+      const hdrStopaj = document.getElementById('hdr-stopaj-input');
+      hdrStopaj.value = s.bank_withholding_rate_percent ?? 4;
+      hdrStopaj.disabled = !s.esnaf_muafiyeti_enabled;
+
+      document.getElementById('set-brand').value = s.brand_name;
+      document.querySelectorAll('.brand-name').forEach(el => { el.textContent = s.brand_name || 'Open Workbench'; });
+      document.getElementById('set-elec').value = s.electricity_price_per_kwh;
+      document.getElementById('set-comm').value = s.commission_rate_percent;
+      document.getElementById('set-ship').value = s.default_shipping_cost;
+      document.getElementById('set-kargo-esik').value = s.kargo_esigi_tl;
+      document.getElementById('set-vat-rate').value = s.default_vat_rate_percent;
+      document.getElementById('set-margin').value = s.default_target_margin_percent;
+      document.getElementById('set-esnaf-enabled').checked = !!s.esnaf_muafiyeti_enabled;
+      document.getElementById('set-stopaj').value = s.bank_withholding_rate_percent ?? 4;
+      document.getElementById('set-esnaf-limit').value = s.esnaf_yillik_limit_tl ?? 1900000;
+
+      document.getElementById('shipping-rates-list').innerHTML = STATE.shippingRates.map(r => `
+        <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-white">${r.tier_name}</div>
+            <div class="text-[11px] text-slate-400">Geçerlilik: ${new Date(r.effective_from).toLocaleString('tr-TR')}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-amber-400">${r.cost_tl.toFixed(2)} TL</span>
+            <button type="button" onclick="deleteItem('/api/shipping-rates/${r.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+          </div>
+        </div>
+      `).join('');
+
+      renderB2BTierLists();
+      renderCategoriesList();
+    }
+
+    function renderCategoriesList() {
+      const box = document.getElementById('settings-categories-list');
+      if (!box) return;
+      box.innerHTML = STATE.categories.map(c => {
+        const isProd = c.target_type === 'PRODUCT';
+        return `
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between gap-2">
+            <div>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isProd ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'}">
+                ${isProd ? '📦 Ürün Kategorisi' : '💡 Malzeme Kategorisi'}
+              </span>
+              <div class="font-semibold text-white mt-1">${c.name}</div>
+            </div>
+            <button type="button" onclick="deleteItem('/api/categories/${c.id}')" class="px-2 py-1 text-rose-400 hover:text-rose-300 font-bold">✕</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleQuickCategoryBox(prefix) {
+      const el = document.getElementById(`quick-cat-${prefix}`);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    async function addQuickCategory(targetType, inputId, selectId, boxId) {
+      const inp = document.getElementById(inputId);
+      const name = (inp.value || '').trim();
+      if (!name) return;
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_type: targetType, name }),
+      });
+      const created = await res.json();
+      inp.value = '';
+      document.getElementById(boxId).classList.add('hidden');
+      await loadAllData();
+      const sel = document.getElementById(selectId);
+      if (sel && created.name) sel.value = created.name;
+    }
+
+    async function submitCategoryFromSettings(e) {
+      e.preventDefault();
+      const target_type = document.getElementById('cat-scope').value;
+      const name = document.getElementById('cat-name').value.trim();
+      if (!name) return;
+      await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_type, name }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function deleteItem(url, uyari = 'Bu kayıt kalıcı olarak silinecek. Emin misiniz?') {
+      if (!confirm(uyari)) return;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) {
+        const hata = await res.json().catch(() => ({}));
+        alert(hata.detail || 'Kayıt silinemedi.');
+      }
+      await loadAllData();
+    }
+
+    function renderB2BTierLists() {
+      const html = STATE.b2bTiers.map(bt => {
+        const rangeStr = bt.max_quantity ? `${bt.min_quantity} - ${bt.max_quantity} Adet` : `${bt.min_quantity}+ Adet`;
+        return `
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between gap-2">
+            <div>
+              <div class="font-bold text-white">${bt.tier_name}</div>
+              <div class="text-[11px] text-sky-300 font-medium">Aralık: ${rangeStr}</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-slate-400 text-[11px]">İskonto %:</span>
+              <input type="number" step="0.5" value="${bt.discount_percent}"
+                onchange="updateB2BTierInline(${bt.id}, '${bt.tier_name}', ${bt.min_quantity}, ${bt.max_quantity === null ? 'null' : bt.max_quantity}, this.value)"
+                class="w-16 px-2 py-1 rounded bg-slate-950 border border-amber-500/50 text-amber-300 font-bold text-center" />
+              <button type="button" onclick="applyB2BTierToQuote(${bt.min_quantity}, ${bt.discount_percent}, '${bt.tier_name}')"
+                class="px-2 py-1 rounded bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 font-semibold" title="Teklife Uygula">
+                Seç
+              </button>
+              <button type="button" onclick="deleteItem('/api/b2b-tiers/${bt.id}')" class="px-1.5 py-1 text-rose-400 hover:text-rose-300 font-bold">✕</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('quote-b2b-tiers-list').innerHTML = html;
+      document.getElementById('settings-b2b-tiers-list').innerHTML = html;
+    }
+
+    function applyB2BTierToQuote(minQty, discPct, tierName) {
+      document.getElementById('q-qty').value = minQty;
+      document.getElementById('q-discount').value = discPct;
+      document.getElementById('q-matched-tier-badge').textContent = `(${tierName})`;
+      runQuoteCalc(false);
+    }
+
+    function onQuoteQtyChange() {
+      const qty = parseInt(document.getElementById('q-qty').value || '1', 10);
+      const matched = STATE.b2bTiers.find(
+        bt => qty >= bt.min_quantity && (bt.max_quantity === null || qty <= bt.max_quantity)
+      );
+      const badge = document.getElementById('q-matched-tier-badge');
+      if (matched) {
+        document.getElementById('q-discount').value = matched.discount_percent;
+        badge.textContent = `(Otomatik: ${matched.tier_name})`;
+      } else {
+        badge.textContent = '(Barem dışı / B2C)';
+      }
+      runQuoteCalc(false);
+    }
+
+    async function submitB2BTier(e) {
+      e.preventDefault();
+      const maxVal = document.getElementById('set-bt-max').value;
+      await fetch('/api/b2b-tiers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier_name: document.getElementById('set-bt-name').value,
+          min_quantity: parseInt(document.getElementById('set-bt-min').value, 10),
+          max_quantity: maxVal ? parseInt(maxVal, 10) : null,
+          discount_percent: parseFloat(document.getElementById('set-bt-disc').value),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function updateB2BTierInline(tierId, name, minQ, maxQ, newDisc) {
+      await fetch(`/api/b2b-tiers/${tierId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier_name: name,
+          min_quantity: minQ,
+          max_quantity: maxQ,
+          discount_percent: parseFloat(newDisc || '0'),
+        }),
+      });
+      await loadAllData();
+      runQuoteCalc(false);
+    }
+
+    async function saveQuickHeaderSettings() {
+      const s = STATE.settings;
+      const newElec = parseFloat(document.getElementById('hdr-elec-input').value || s.electricity_price_per_kwh);
+      const newShip = parseFloat(document.getElementById('hdr-ship-input').value || s.default_shipping_cost);
+      const newComm = parseFloat(document.getElementById('hdr-comm-input').value || s.commission_rate_percent);
+      const esnafEnabled = document.getElementById('hdr-esnaf-chk').checked;
+      const newStopaj = parseFloat(document.getElementById('hdr-stopaj-input').value || s.bank_withholding_rate_percent || 0);
+
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand_name: s.brand_name || 'Open Workbench',
+          electricity_price_per_kwh: newElec,
+          commission_rate_percent: newComm,
+          esnaf_muafiyeti_enabled: esnafEnabled,
+          bank_withholding_rate_percent: newStopaj,
+          esnaf_yillik_limit_tl: s.esnaf_yillik_limit_tl ?? 1900000,
+          default_shipping_cost: newShip,
+          kargo_esigi_tl: s.kargo_esigi_tl ?? 0,
+          default_vat_rate_percent: s.default_vat_rate_percent || 20,
+          default_vat_enabled: s.default_vat_enabled || false,
+          default_target_margin_percent: s.default_target_margin_percent || 50,
+          default_b2b_margin_percent: s.default_b2b_margin_percent || 35,
+        }),
+      });
+
+      if (newShip !== s.default_shipping_cost) {
+        await fetch('/api/shipping-rates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tier_name: 'Güncel Standart Kargo Baremi',
+            cost_tl: newShip,
+            notes: 'Üst bardan güncellendi',
+          }),
+        });
+      }
+
+      const btn = document.getElementById('hdr-save-btn');
+      btn.textContent = '✅ Güncellendi!';
+      setTimeout(() => { btn.textContent = '💾 Hızlı Kaydet'; }, 1800);
+      await loadAllData();
+    }
+
+    function renderDashboard(dash) {
+      document.getElementById('dash-counts').textContent = `${dash.counts.machines} Yazıcı / ${dash.counts.products} Ürün`;
+      document.getElementById('dash-sub-counts').textContent = `${dash.counts.filaments} Filament • ${dash.counts.materials} Ek Bileşen • ${dash.counts.orders} Sipariş`;
+
+      const inv = dash.inventory_summary || {};
+      document.getElementById('dash-inv-value').textContent = `${(inv.total_inventory_value_tl || 0).toFixed(2)} TL`;
+      document.getElementById('dash-inv-sub').textContent = `Filament: ${inv.total_filament_stock_kg || 0} kg (${(inv.total_filament_value_tl || 0).toFixed(0)} TL) | Sarf: ${(inv.total_material_value_tl || 0).toFixed(0)} TL`;
+
+      document.getElementById('dash-rev').textContent = `${dash.financial_summary.total_revenue_tl.toFixed(2)} TL`;
+      document.getElementById('dash-hours').textContent = `Toplam Baskı: ${dash.financial_summary.total_print_hours_decimal.toFixed(2)} saat`;
+      document.getElementById('dash-profit').textContent = `${dash.financial_summary.total_net_profit_tl.toFixed(2)} TL`;
+
+      // Esnaf Vergi Muafiyeti Takip Bandı
+      const esnaf = dash.esnaf_muafiyeti_summary || {};
+      const esnafBanner = document.getElementById('dash-esnaf-banner');
+      if (esnaf.enabled) {
+        esnafBanner.classList.remove('hidden');
+        const barPct = Math.min(100, esnaf.limit_usage_percent || 0);
+        esnafBanner.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span class="font-bold text-emerald-300 text-sm">🏛️ Esnaf Vergi Muafiyeti Belgesi (GVK 9/10) Aktif — Banka Stopajı: %${esnaf.stopaj_rate_percent}</span>
+              <div class="text-slate-300 mt-0.5">
+                ${esnaf.current_year} Yıllık Brüt Hasılat: <strong>${(esnaf.ytd_gross_revenue_tl || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</strong> /
+                Yasal Sınır: <strong>${(esnaf.annual_limit_tl || 1900000).toLocaleString('tr-TR')} TL</strong>
+                (Kalan: <strong class="text-emerald-300">${(esnaf.remaining_limit_tl || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</strong> • %${esnaf.limit_usage_percent})
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-slate-300">Kesilen Toplam Banka Stopajı: <strong class="text-amber-300">-${(esnaf.total_bank_withholding_tl || 0).toFixed(2)} TL</strong></div>
+              <div class="text-slate-300">Bankaya Net Yatan: <strong class="text-emerald-400">${(esnaf.total_bank_net_payout_tl || 0).toFixed(2)} TL</strong></div>
+            </div>
+          </div>
+          <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+            <div class="h-full ${barPct >= 80 ? 'bg-rose-500' : 'bg-emerald-500'}" style="width: ${barPct}%"></div>
+          </div>
+        `;
+      } else {
+        esnafBanner.classList.add('hidden');
+      }
+
+      // Ürün Özeti Tablosu
+      const tbody = document.getElementById('dash-products-summary-tbody');
+      const pList = dash.product_summaries || [];
+      tbody.innerHTML = pList.length
+        ? pList.map(p => `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-2.5 px-3">
+                <span class="font-mono text-indigo-300 font-semibold">${p.sku}</span>
+                <div class="font-bold text-white">${p.name}</div>
+              </td>
+              <td class="py-2.5 px-3 text-slate-300">${p.category}</td>
+              <td class="py-2.5 px-3 text-amber-300 font-medium">${p.formatted_time}</td>
+              <td class="py-2.5 px-3 font-bold text-white">${p.production_cost_tl.toFixed(2)} TL</td>
+              <td class="py-2.5 px-3 font-bold text-rose-400">${p.break_even_tl.toFixed(2)} TL</td>
+              <td class="py-2.5 px-3">
+                <span class="font-extrabold text-emerald-400">${p.b2c_sale_price_tl.toFixed(2)} TL</span>
+                <span class="text-[11px] text-slate-400 block">Kâr: +${p.b2c_net_profit_tl.toFixed(2)} TL</span>
+              </td>
+              <td class="py-2.5 px-3 font-bold text-sky-400">${p.b2b_10plus_price_tl.toFixed(2)} TL</td>
+              <td class="py-2.5 px-3 text-right">
+                <button onclick="openAiModal(${p.product_id})" class="px-2.5 py-1 rounded bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 font-semibold">
+                  🤖 AI Paketi
+                </button>
+              </td>
+            </tr>
+          `).join('')
+        : `<tr><td colspan="8" class="py-4 text-center text-slate-400">Henüz ürün reçetesi eklenmedi.</td></tr>`;
+
+      // Makine Kartları
+      document.getElementById('dash-machines-list').innerHTML = dash.machine_cards.map(mc => `
+        <div class="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-white">${mc.machine_name}</span>
+            <span class="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold text-xs">
+              Saatlik Toplam: ${mc.total_hourly_cost_tl.toFixed(2)} TL/saat
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-xs text-slate-300 pt-1">
+            <div class="p-2 rounded bg-slate-900">Amortisman: <strong>${mc.hourly_depreciation_tl.toFixed(2)} TL/s</strong></div>
+            <div class="p-2 rounded bg-slate-900">Parça Payı: <strong>${mc.hourly_parts_wear_tl.toFixed(2)} TL/s</strong></div>
+            <div class="p-2 rounded bg-slate-900">Elektrik: <strong>${mc.hourly_electricity_tl.toFixed(2)} TL/s</strong></div>
+          </div>
+        </div>
+      `).join('');
+
+      // Uyarılar
+      const alerts = [];
+      dash.maintenance_warnings.forEach(w => alerts.push(`<div class="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300">🔧 ${w}</div>`));
+      dash.low_filaments.forEach(f => alerts.push(`<div class="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300">🧵 Kritik Filament: ${f.name} (Kalan: ${f.remaining_gr} gr)</div>`));
+      dash.low_materials.forEach(m => alerts.push(`<div class="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300">📦 Kritik Malzeme: ${m.name} (Kalan: ${m.stock} ${m.unit})</div>`));
+
+      document.getElementById('dash-alerts').innerHTML = alerts.length
+        ? alerts.join('')
+        : `<div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">✅ Tüm makine parçaları ve hammadde stokları güvenli seviyede.</div>`;
+    }
+
+    function renderSelectOptions() {
+      const prodCats = STATE.categories.filter(c => c.target_type === 'PRODUCT');
+      const matCats = STATE.categories.filter(c => c.target_type === 'MATERIAL');
+      const fallbackProdCats = ['B2C - Dekoratif Vazo & Obje', 'B2C - Aydınlatma & Abajur', 'B2C - Masaüstü Düzenleyici', 'B2B - Kurumsal 3D Logo & Harf', 'B2B - Kurumsal Ofis & Promosyon'];
+      const fallbackMatCats = ['AMBALAJ', 'ELEKTRIK', 'MONTAJ', 'AKSESUAR', 'DIGER'];
+
+      const pCatEl = document.getElementById('p-category');
+      if (pCatEl) {
+        const prev = pCatEl.value;
+        const pOpts = prodCats.length > 0 ? prodCats.map(c => c.name) : fallbackProdCats;
+        pCatEl.innerHTML = pOpts.map(n => `<option value="${n}">${n}</option>`).join('');
+        if (prev && pOpts.includes(prev)) pCatEl.value = prev;
+      }
+
+      const mCatEl = document.getElementById('m-cat');
+      if (mCatEl) {
+        const prev = mCatEl.value;
+        const mOpts = matCats.length > 0 ? matCats.map(c => c.name) : fallbackMatCats;
+        mCatEl.innerHTML = mOpts.map(n => `<option value="${n}">${n}</option>`).join('');
+        if (prev && mOpts.includes(prev)) mCatEl.value = prev;
+      }
+
+      const macOpts = STATE.machines.map(m => `<option value="${m.id}">${m.name} (${m.cost_breakdown.total_hourly_cost_tl.toFixed(2)} TL/saat)</option>`).join('');
+      const macSec = STATE.machines.length > 1 ? `<option value="">⚠️ Makine seçin</option>` : '';
+      ['p-machine', 'q-machine', 'mp-machine', 'ord-machine'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const prev = el.value;
+        el.innerHTML = macSec + macOpts;
+        if (STATE.machines.some(m => String(m.id) === prev)) el.value = prev;
+      });
+
+      const shipEl = document.getElementById('p-shipping-tier');
+      shipEl.innerHTML = STATE.shippingRates.length > 0
+        ? STATE.shippingRates.map(r => `<option value="${r.id}">${r.tier_name} (${r.cost_tl} TL)</option>`).join('')
+        : `<option value="">Standart (${(STATE.settings.default_shipping_cost || 0).toFixed(2)} TL)</option>`;
+
+      document.getElementById('q-filament').innerHTML = STATE.filaments.map(
+        f => `<option value="${f.id}">${f.brand} ${f.material_type} - ${f.color_name} (${f.price_per_kg_tl} TL/kg)</option>`
+      ).join('');
+
+      document.getElementById('ord-product').innerHTML = STATE.products.map(
+        p => `<option value="${p.product_id}">${p.sku} — ${p.name} (${p.b2c_pricing.final_sale_price_gross_tl} TL)</option>`
+      ).join('');
+
+      const fContainer = document.getElementById('bom-filaments-container');
+      if (fContainer && fContainer.children.length === 0 && STATE.filaments.length > 0) {
+        addBomFilamentRow(STATE.filaments[0].id, 120, 5);
+      }
+      const mContainer = document.getElementById('bom-materials-container');
+      if (mContainer && mContainer.children.length === 0 && STATE.materials.length > 0) {
+        addBomMaterialRow(STATE.materials[0].id, 1, 0);
+      }
+      const gItemsContainer = document.getElementById('grp-items-container');
+      if (gItemsContainer && gItemsContainer.children.length === 0 && STATE.materials.length > 0) {
+        addGroupItemRow(STATE.materials[0].id, 1, 0);
+      }
+    }
+
+    function addBomFilamentRow(selectedId = null, netGr = 100, wastePct = 5) {
+      const container = document.getElementById('bom-filaments-container');
+      const row = document.createElement('div');
+      row.className = 'grid grid-cols-12 gap-1.5 items-center bom-filament-row';
+      const opts = STATE.filaments.map(f =>
+        `<option value="${f.id}" ${f.id === selectedId ? 'selected' : ''}>${f.brand} ${f.material_type} - ${f.color_name}</option>`
+      ).join('');
+      row.innerHTML = `
+        <select class="col-span-6 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-f-id">${opts}</select>
+        <input type="number" step="0.1" value="${netGr}" class="col-span-3 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-f-gr" placeholder="Net gr" title="Net Gramaj (gr)" />
+        <input type="number" step="0.5" value="${wastePct}" class="col-span-2 px-2 py-1.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300 bom-f-waste" placeholder="Fire %" title="BOM Fire Oranı (%)" />
+        <button type="button" onclick="this.parentElement.remove()" class="col-span-1 text-rose-400 hover:text-rose-300 font-bold text-center">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function addBomMaterialRow(selectedId = null, qty = 1, wastePct = 0) {
+      const container = document.getElementById('bom-materials-container');
+      const row = document.createElement('div');
+      row.className = 'grid grid-cols-12 gap-1.5 items-center bom-material-row';
+      const opts = STATE.materials.map(m =>
+        `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${m.name} (${m.unit_cost_tl} TL/${m.unit})</option>`
+      ).join('');
+      row.innerHTML = `
+        <select class="col-span-6 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-m-id">${opts}</select>
+        <input type="number" step="0.1" value="${qty}" class="col-span-3 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-m-qty" placeholder="Miktar" title="Kullanılan Miktar" />
+        <input type="number" step="0.5" value="${wastePct}" class="col-span-2 px-2 py-1.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300 bom-m-waste" placeholder="Fire %" title="BOM Fire Oranı (%)" />
+        <button type="button" onclick="this.parentElement.remove()" class="col-span-1 text-rose-400 hover:text-rose-300 font-bold text-center">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function addBomGroupRow(selectedId = null, qty = 1) {
+      const container = document.getElementById('bom-groups-container');
+      if (!STATE.materialGroups.length) {
+        alert('Önce "Hammadde & Malzeme" sekmesinden Ambalaj_Kucuk / Orta / Buyuk grubu oluşturun.');
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'grid grid-cols-12 gap-1.5 items-center bom-group-row';
+      const opts = STATE.materialGroups.map(g =>
+        `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${g.code} — ${g.name} (${g.unit_cost_tl.toFixed(2)} TL)</option>`
+      ).join('');
+      row.innerHTML = `
+        <select class="col-span-8 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-g-id">${opts}</select>
+        <input type="number" step="0.5" min="0.1" value="${qty}" class="col-span-3 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 bom-g-qty" placeholder="Adet" title="Grup Adedi" />
+        <button type="button" onclick="this.parentElement.remove()" class="col-span-1 text-rose-400 hover:text-rose-300 font-bold text-center">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    // Ortak G-Code Yükleyici (Hem BOM hem Teklif ekranı için)
+    async function parseUploadedGcode(file, statusEl) {
+      const formData = new FormData();
+      formData.append('file', file);
+      statusEl.classList.remove('hidden');
+      statusEl.textContent = '⏳ Orca Slicer G-Code verileri okunuyor...';
+
+      const res = await fetch('/api/slicer/parse-file', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Dosya okunamadı' }));
+        statusEl.innerHTML = `<span class="text-rose-400">❌ ${err.detail || 'Dosya okunamadı.'}</span>`;
+        return null;
+      }
+      return await res.json();
+    }
+
+    async function handleSlicerFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const statusEl = document.getElementById('slicer-parse-status');
+      const data = await parseUploadedGcode(file, statusEl);
+      if (!data) return;
+
+      STATE.uploadedFilename = data.filename;
+      STATE.uploadedThumbnail = data.thumbnail_base64 || null;
+
+      document.getElementById('p-hours').value = data.hours || 0;
+      document.getElementById('p-minutes').value = data.minutes || 0;
+      updateDecimalPreview();
+
+      if (data.size_x_mm) document.getElementById('p-x').value = data.size_x_mm;
+      if (data.size_y_mm) document.getElementById('p-y').value = data.size_y_mm;
+      if (data.size_z_mm) document.getElementById('p-z').value = data.size_z_mm;
+
+      if (!document.getElementById('p-name').value) {
+        document.getElementById('p-name').value = data.filename.replace(/\.(gcode\.3mf|3mf|gcode)$/i, '');
+      }
+      if (!document.getElementById('p-sku').value) {
+        document.getElementById('p-sku').value = 'PRT-' + Math.floor(100 + Math.random() * 900);
+      }
+
+      const noteParts = [];
+      if (data.layer_height_mm) noteParts.push(`${data.layer_height_mm}mm katman`);
+      if (data.wall_loops) noteParts.push(`${data.wall_loops} duvar`);
+      if (data.infill_percent !== undefined) noteParts.push(`%${data.infill_percent} dolgu`);
+      if (data.filament_type_hint) noteParts.push(`(${data.filament_type_hint})`);
+      if (noteParts.length > 0) document.getElementById('p-notes').value = noteParts.join(', ');
+
+      const fContainer = document.getElementById('bom-filaments-container');
+      const perExt = data.filament_grams_per_extruder || [];
+      if (perExt.length > 1 && STATE.filaments.length > 0) {
+        fContainer.innerHTML = '';
+        perExt.forEach((gr, idx) => {
+          const filObj = STATE.filaments[idx % STATE.filaments.length];
+          addBomFilamentRow(filObj.id, gr, 5);
+        });
+      } else if (data.filament_grams > 0) {
+        const firstGrInput = document.querySelector('.bom-f-gr');
+        if (!firstGrInput && STATE.filaments.length > 0) {
+          addBomFilamentRow(STATE.filaments[0].id, data.filament_grams, 5);
+        } else if (firstGrInput) {
+          firstGrInput.value = data.filament_grams;
+        }
+      }
+
+      const thumbHtml = data.thumbnail_base64
+        ? `<img src="${data.thumbnail_base64}" class="w-12 h-12 rounded-lg border border-slate-700 object-cover bg-slate-900" />`
+        : '';
+
+      statusEl.innerHTML = `
+        <div class="flex items-center gap-3 pt-1">
+          ${thumbHtml}
+          <div>
+            ✅ <strong>${data.filename}</strong> BOM'a aktarıldı:<br/>
+            ⏱️ Süre: <strong>${data.hours} saat ${data.minutes} dk (${data.decimal_hours} saat)</strong> |
+            🧵 Net: <strong>${data.filament_grams} gr</strong> |
+            📐 Boyut: <strong>${data.size_x_mm}x${data.size_y_mm}x${data.size_z_mm} mm</strong>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleQuoteSlicerUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const statusEl = document.getElementById('quote-slicer-status');
+      const data = await parseUploadedGcode(file, statusEl);
+      if (!data) return;
+
+      document.getElementById('q-hours').value = data.hours || 0;
+      document.getElementById('q-minutes').value = data.minutes || 0;
+      if (data.filament_grams > 0) document.getElementById('q-grams').value = data.filament_grams;
+      statusEl.innerHTML = `✅ <strong>${data.filename}</strong>: Birim süre <strong>${data.hours}s ${data.minutes}dk (${data.decimal_hours} saat)</strong> | Net: <strong>${data.filament_grams} gr</strong> | Boyut: <strong>${data.size_x_mm}x${data.size_y_mm}x${data.size_z_mm} mm</strong>`;
+      runQuoteCalc(false);
+    }
+
+    async function submitProductForm(e) {
+      e.preventDefault();
+      const filaments = Array.from(document.querySelectorAll('.bom-filament-row')).map(r => ({
+        filament_id: parseInt(r.querySelector('.bom-f-id').value, 10),
+        net_weight_gr: parseFloat(r.querySelector('.bom-f-gr').value || '0'),
+        waste_rate_percent: parseFloat(r.querySelector('.bom-f-waste').value || '0'),
+      }));
+      const materials = Array.from(document.querySelectorAll('.bom-material-row')).map(r => ({
+        material_id: parseInt(r.querySelector('.bom-m-id').value, 10),
+        quantity: parseFloat(r.querySelector('.bom-m-qty').value || '1'),
+        waste_rate_percent: parseFloat(r.querySelector('.bom-m-waste').value || '0'),
+      }));
+      const groups = Array.from(document.querySelectorAll('.bom-group-row')).map(r => ({
+        group_id: parseInt(r.querySelector('.bom-g-id').value, 10),
+        quantity: parseFloat(r.querySelector('.bom-g-qty').value || '1'),
+      }));
+      const rawTier = document.getElementById('p-shipping-tier').value;
+
+      const res = await fetch(STATE.editingProductId ? `/api/products/${STATE.editingProductId}` : '/api/products', {
+        method: STATE.editingProductId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sku: document.getElementById('p-sku').value,
+          name: document.getElementById('p-name').value,
+          category: document.getElementById('p-category').value,
+          variant_name: document.getElementById('p-variant').value,
+          machine_id: parseInt(document.getElementById('p-machine').value, 10),
+          source_file_name: STATE.uploadedFilename,
+          print_time_hours_int: parseInt(document.getElementById('p-hours').value || '0', 10),
+          print_time_minutes_int: parseInt(document.getElementById('p-minutes').value || '0', 10),
+          size_x_mm: parseFloat(document.getElementById('p-x').value || '0'),
+          size_y_mm: parseFloat(document.getElementById('p-y').value || '0'),
+          size_z_mm: parseFloat(document.getElementById('p-z').value || '0'),
+          shipping_tier_id: rawTier ? parseInt(rawTier, 10) : null,
+          target_margin_percent: parseFloat(document.getElementById('p-margin').value || '50'),
+          vat_enabled: document.getElementById('p-vat-enabled').checked,
+          vat_rate_percent: STATE.settings.default_vat_rate_percent || 20,
+          thumbnail_base64: STATE.uploadedThumbnail,
+          notes: document.getElementById('p-notes').value,
+          urun_tipi: document.getElementById('p-urun-tipi').value,
+          stl_path: document.getElementById('p-stl-path').value || null,
+          gozetimsiz_baski: document.getElementById('p-gozetimsiz').checked,
+          filaments,
+          materials,
+          groups,
+        }),
+      });
+      if (!res.ok) {
+        const hata = await res.json().catch(() => ({}));
+        alert(hata.detail || 'Ürün kaydedilemedi.');
+        return;
+      }
+      cancelProductEdit();
+      await loadAllData();
+    }
+
+    function editProduct(productId) {
+      const p = STATE.products.find(x => x.product_id === productId);
+      STATE.editingProductId = productId;
+      const alanlar = {
+        'p-sku': p.sku, 'p-name': p.name, 'p-variant': p.variant_name, 'p-category': p.category,
+        'p-machine': p.machine.id, 'p-hours': p.print_time.hours, 'p-minutes': p.print_time.minutes,
+        'p-x': p.dimensions_mm.x, 'p-y': p.dimensions_mm.y, 'p-z': p.dimensions_mm.z,
+        'p-shipping-tier': p.shipping_tier_id ?? '', 'p-margin': p.target_margin_percent, 'p-notes': p.notes || '',
+      };
+      Object.entries(alanlar).forEach(([id, deger]) => { document.getElementById(id).value = deger; });
+      document.getElementById('p-machine').setCustomValidity('');
+      document.getElementById('p-vat-enabled').checked = p.vat_enabled;
+      document.getElementById('p-urun-tipi').value = p.urun_tipi || 'STANDART';
+      document.getElementById('p-stl-path').value = p.stl_path || '';
+      document.getElementById('p-gozetimsiz').checked = !!p.gozetimsiz_baski;
+      urunTipiDegisti();
+      document.getElementById('bom-filaments-container').innerHTML = '';
+      document.getElementById('bom-materials-container').innerHTML = '';
+      document.getElementById('bom-groups-container').innerHTML = '';
+      p.filaments.forEach(f => addBomFilamentRow(f.filament_id, f.net_weight_gr, f.waste_rate_percent));
+      p.materials.forEach(m => addBomMaterialRow(m.material_id, m.quantity, m.waste_rate_percent));
+      (p.material_groups || []).forEach(g => addBomGroupRow(g.group_id, g.quantity));
+      updateDecimalPreview();
+      document.getElementById('product-save-btn').textContent = `💾 ${p.sku} Reçetesini Güncelle`;
+      document.getElementById('product-edit-cancel').hidden = false;
+      document.getElementById('product-form').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function urunTipiDegisti() {
+      const ozel = document.getElementById('p-urun-tipi').value === 'KISIYE_OZEL';
+      const kutu = document.getElementById('p-gozetimsiz');
+      kutu.disabled = ozel;
+      if (ozel) kutu.checked = false;
+    }
+
+    async function istasyonIstek(url, govde) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(govde || {}),
+      });
+      const veri = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(veri.detail || 'İşlem yapılamadı.'); return null; }
+      await loadAllData();
+      return veri;
+    }
+
+    async function gcodeOnayla(productId, sku) {
+      const yol = prompt(`${sku} için denetlediğiniz G-code dosyasının tam yolu:\n(Dosya depoya kopyalanır; süre ve gram ürün kartına yazılır.)`);
+      if (!yol) return;
+      const veri = await istasyonIstek(`/api/products/${productId}/gcode-onayla`, { gcode_yolu: yol.trim() });
+      if (veri) alert(`Onaylandı: ${veri.saat} sa ${veri.dakika} dk, ${veri.gram} g.` + (veri.uyari ? `\n${veri.uyari}` : ''));
+    }
+
+    function cancelProductEdit() {
+      STATE.editingProductId = null;
+      document.getElementById('product-form').reset();
+      urunTipiDegisti();
+      document.getElementById('bom-filaments-container').innerHTML = '';
+      document.getElementById('bom-materials-container').innerHTML = '';
+      document.getElementById('bom-groups-container').innerHTML = '';
+      document.getElementById('product-save-btn').textContent = '💾 Ürün Reçetesini (BOM) Kaydet ve Fiyatı Hesapla';
+      document.getElementById('product-edit-cancel').hidden = true;
+      renderSelectOptions();
+    }
+
+    async function toggleProductVat(productId, currentVat) {
+      await fetch(`/api/products/${productId}/toggle-vat?vat_enabled=${!currentVat}`, { method: 'PUT' });
+      await loadAllData();
+    }
+
+    async function openAiModal(productId) {
+      const res = await fetch(`/api/products/${productId}/ai-bundle`).then(r => r.json());
+      document.getElementById('ai-prompt-textarea').value = res.claude_module1_prompt;
+      document.getElementById('ai-modal').showModal();
+    }
+
+    function copyAiPrompt() {
+      const el = document.getElementById('ai-prompt-textarea');
+      el.select();
+      navigator.clipboard.writeText(el.value);
+    }
+
+    function renderProducts() {
+      document.getElementById('products-list').innerHTML = STATE.products.map(p => {
+        const b2c = p.b2c_pricing;
+        const thumbImg = p.thumbnail_base64
+          ? `<img src="${p.thumbnail_base64}" class="w-14 h-14 rounded-xl border border-slate-700 object-cover bg-slate-950 shrink-0" />`
+          : '';
+        return `
+          <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-3">
+              <div class="flex items-start gap-3">
+                ${thumbImg}
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-xs">${p.sku}</span>
+                    <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs">${p.category}</span>
+                  </div>
+                  <h3 class="font-bold text-base text-white mt-1">${p.name} <span class="text-slate-400 font-normal text-sm">(${p.variant_name})</span></h3>
+                  <div class="text-xs text-slate-400 mt-0.5">
+                    📐 <strong>${p.dimensions_mm.formatted}</strong> | ⏱️ <strong class="text-amber-300">${p.print_time.formatted}</strong> | 🖨️ ${p.machine.name}
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button onclick="toggleProductVat(${p.product_id}, ${p.vat_enabled})"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${p.vat_enabled ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-slate-800 border-slate-700 text-slate-400'}">
+                  ${p.vat_enabled ? `✅ KDV Açık (%${p.vat_rate_percent})` : '⭕ KDV Yok (%0)'}
+                </button>
+                <button onclick="openAiModal(${p.product_id})"
+                  class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow">
+                  🤖 Modül 1-2-3 AI Paketi
+                </button>
+                <button onclick="gcodeOnayla(${p.product_id}, '${p.sku}')" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold" title="${p.gcode_sha256 ? 'Onaylı G-code: ' + p.gcode_sha256.slice(0, 8) + ' (' + (p.gcode_onay_tarihi || '').slice(0, 10) + ')' : 'Onaylı G-code yok'}">${p.gcode_sha256 ? '✅ G-code onaylı' : '📎 G-code onayla'}${p.urun_tipi === 'KISIYE_OZEL' ? ' · özel' : ''}${p.gozetimsiz_baski ? ' · gözetimsiz' : ''}</button>
+                <button onclick="editProduct(${p.product_id})" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold" title="Reçeteyi Düzenle">✏️ Düzenle</button>
+                <button onclick="deleteItem('/api/products/${p.product_id}')" class="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-rose-400 text-xs font-bold" title="Ürünü Sil">✕</button>
+              </div>
+            </div>
+
+            <!-- Maliyet Kırılımı & BOM -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div class="p-2.5 rounded-lg bg-slate-800/80">
+                <div class="text-slate-400">Makine + Elektrik (${p.print_time.decimal_hours}s)</div>
+                <div class="font-bold text-sm mt-0.5">${p.machine.print_machine_cost_tl.toFixed(2)} TL</div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-slate-800/80">
+                <div class="text-slate-400">Filament (Fireli: ${p.total_filament_with_waste_gr}g)</div>
+                <div class="font-bold text-sm mt-0.5">${p.total_filament_cost_tl.toFixed(2)} TL</div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-slate-800/80">
+                <div class="text-slate-400">Ek Bileşen & Ambalaj (BOM)</div>
+                <div class="font-bold text-sm mt-0.5">${p.total_material_cost_tl.toFixed(2)} TL</div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700">
+                <div class="text-slate-300 font-medium">Net Üretim Maliyeti</div>
+                <div class="font-bold text-sm text-amber-400 mt-0.5">${p.production_cost_tl.toFixed(2)} TL</div>
+              </div>
+            </div>
+
+            ${(p.material_groups && p.material_groups.length) ? `
+              <div class="flex flex-wrap gap-2 text-[11px]">
+                ${p.material_groups.map(g => `
+                  <span class="px-2.5 py-1 rounded-lg bg-amber-950/30 border border-amber-500/40 text-amber-200">
+                    📦 <strong>${g.group_code}</strong> (x${g.quantity}): ${g.total_cost_tl.toFixed(2)} TL
+                    <span class="text-slate-400">(${(g.items || []).map(it => `${it.quantity} ${it.unit} ${it.material_name.split(' ')[0]}`).join(' + ')})</span>
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            <!-- Başa Baş Noktası vs Satış Fiyatı -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div class="p-3 rounded-xl bg-rose-950/30 border border-rose-500/40">
+                <div class="text-[11px] text-rose-300 font-semibold">🔴 Başa Baş Noktası (Sıfır Zarar)</div>
+                <div class="text-lg font-extrabold text-rose-400 mt-0.5">${b2c.break_even_gross_tl.toFixed(2)} TL</div>
+                <div class="text-[11px] text-slate-400">Üretim + Kargo (${p.shipping_cost_tl} TL) + Kom + Stopaj</div>
+              </div>
+
+              <div class="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/40">
+                <div class="text-[11px] text-emerald-300 font-semibold">🟢 B2C Satış Fiyatı (%${p.target_margin_percent} Marj)</div>
+                <div class="text-lg font-extrabold text-emerald-400 mt-0.5">${b2c.final_sale_price_gross_tl.toFixed(2)} TL</div>
+                <div class="text-[11px] text-emerald-300/80">
+                  Net Kâr: <strong>+${b2c.net_profit_tl.toFixed(2)} TL</strong>
+                  (Kom: ${b2c.commission_amount_tl} TL${b2c.bank_withholding_rate_percent ? ` • Stopaj %${b2c.bank_withholding_rate_percent}: -${b2c.bank_withholding_amount_tl} TL • Banka Net: ${b2c.bank_net_payout_tl} TL` : ''})
+                </div>
+              </div>
+
+              <div class="p-3 rounded-xl bg-sky-950/30 border border-sky-500/40">
+                <div class="text-[11px] text-sky-300 font-semibold">🔵 B2B Kurumsal Fiyat (10+)</div>
+                <div class="text-lg font-extrabold text-sky-400 mt-0.5">${p.b2b_unit_pricing_10plus.final_sale_price_gross_tl.toFixed(2)} TL</div>
+                <div class="text-[11px] text-slate-400">Kurumsal toplu alım birim fiyatı</div>
+              </div>
+            </div>
+
+            <!-- B2B İskonto Baremleri Tablosu -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2 text-xs">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-sky-300">🏷️ B2B Toplu Alım İskonto Baremlerine Göre Birim Fiyatlar</span>
+                <button onclick="switchTab('quotes')" class="text-[11px] text-indigo-400 hover:underline">Teklif Hesaplayıcıya Git →</button>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                ${(p.b2b_tiers_breakdown || []).map(bt => `
+                  <div class="p-2 rounded-lg bg-slate-900 border ${bt.is_below_break_even ? 'border-rose-500/60' : 'border-slate-800'}">
+                    <div class="text-[11px] font-bold text-white">${bt.tier_name}</div>
+                    <div class="text-[10px] text-amber-300">İskonto: -%${bt.discount_percent}</div>
+                    <div class="text-sm font-extrabold text-sky-400 mt-0.5">${bt.unit_sale_price_tl.toFixed(2)} TL/ad</div>
+                    <div class="text-[10px] ${bt.unit_net_profit_tl >= 0 ? 'text-emerald-400' : 'text-rose-400'}">Birim Kâr: ${bt.unit_net_profit_tl >= 0 ? '+' : ''}${bt.unit_net_profit_tl.toFixed(2)} TL</div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function runQuoteCalc(saveFlag = false) {
+      if (!document.getElementById('q-machine').value) {
+        document.getElementById('quote-result-card').innerHTML =
+          `<div class="p-3 rounded-xl bg-amber-500/20 border border-amber-500 text-amber-200 text-xs font-bold">⚠️ Birden fazla makine var, makine seçin.</div>`;
+        return;
+      }
+      const payload = {
+        customer_name: document.getElementById('q-customer').value,
+        project_title: document.getElementById('q-title').value,
+        quantity: parseInt(document.getElementById('q-qty').value || '1', 10),
+        machine_id: parseInt(document.getElementById('q-machine').value, 10),
+        print_hours_per_unit: parseInt(document.getElementById('q-hours').value || '0', 10),
+        print_minutes_per_unit: parseInt(document.getElementById('q-minutes').value || '0', 10),
+        filament_id: parseInt(document.getElementById('q-filament').value || '1', 10),
+        net_grams_per_unit: parseFloat(document.getElementById('q-grams').value || '0'),
+        bom_waste_percent: parseFloat(document.getElementById('q-waste').value || '0'),
+        extra_material_cost_per_unit_tl: parseFloat(document.getElementById('q-extra').value || '0'),
+        design_setup_fee_tl: 0,
+        shipping_total_tl: parseFloat(document.getElementById('q-shipping').value || '0'),
+        target_margin_percent: parseFloat(document.getElementById('q-margin').value || '40'),
+        discount_percent: parseFloat(document.getElementById('q-discount').value || '0'),
+        vat_enabled: document.getElementById('q-vat').checked,
+        vat_rate_percent: STATE.settings.default_vat_rate_percent || 20,
+        save_quote: saveFlag,
+      };
+
+      const res = await fetch('/api/quotes/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json());
+
+      const pr = res.pricing;
+      const warnHtml = pr.is_below_break_even
+        ? `<div class="p-3 rounded-xl bg-rose-600/20 border border-rose-500 text-rose-200 text-xs font-bold">⚠️ DİKKAT: Verdiğin iskonto (%${pr.discount_percent}) nedeniyle teklif fiyatı BAŞA BAŞ NOKTASININ ALTINA düştü! Bu teklif zarar yazar.</div>`
+        : '';
+
+      document.getElementById('quote-result-card').innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <span class="text-xs text-slate-400">${payload.customer_name} — ${res.quantity} Adet</span>
+            <h3 class="text-lg font-bold text-white">${payload.project_title}</h3>
+          </div>
+          <span class="px-3 py-1 rounded-full text-xs font-bold ${pr.vat_enabled ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-400'}">
+            ${pr.vat_enabled ? `KDV Dahil (%${pr.vat_rate_percent})` : 'KDV Yok (%0)'}
+          </span>
+        </div>
+
+        ${warnHtml}
+
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="p-3 rounded-lg bg-slate-800">
+            <span class="text-slate-400 block">Birim Süre (Ondalıklı)</span>
+            <strong class="text-sm text-amber-300">${res.decimal_hours_per_unit} saat/adet (Toplam: ${res.total_print_hours_decimal} saat)</strong>
+          </div>
+          <div class="p-3 rounded-lg bg-slate-800">
+            <span class="text-slate-400 block">Birim Üretim Maliyeti</span>
+            <strong class="text-sm text-white">${res.unit_production_cost_tl.toFixed(2)} TL/adet (Toplam: ${res.total_production_cost_tl.toFixed(2)} TL)</strong>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-rose-950/40 border border-rose-500/50 space-y-1">
+            <div class="text-xs font-bold text-rose-300">🔴 BAŞA BAŞ NOKTASI (Sıfır Zarar Alt Sınırı)</div>
+            <div class="text-2xl font-extrabold text-rose-400">${pr.break_even_gross_tl.toFixed(2)} TL</div>
+            <div class="text-xs text-rose-200/80">Birim Başa Baş: <strong>${res.unit_break_even_gross_tl.toFixed(2)} TL / adet</strong></div>
+            <div class="text-[11px] text-slate-400">Bu tutarın altına inersen cebinden para çıkar.</div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 space-y-1">
+            <div class="text-xs font-bold text-emerald-300">🟢 MÜŞTERİYE SUNULACAK NİHAİ TEKLİF</div>
+            <div class="text-2xl font-extrabold text-emerald-400">${pr.final_sale_price_gross_tl.toFixed(2)} TL</div>
+            <div class="text-xs text-emerald-200">Birim Teklif: <strong>${res.unit_final_offer_gross_tl.toFixed(2)} TL / adet</strong></div>
+            <div class="text-[11px] text-slate-300">İskonto Öncesi: <span class="line-through">${pr.recommended_gross_tl.toFixed(2)} TL</span> (-%${pr.discount_percent})</div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-800/90 border border-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div>
+            <span class="text-slate-400 block">Matrah (KDV Hariç)</span>
+            <strong class="text-white text-sm">${pr.final_net_matrah_tl.toFixed(2)} TL</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block">Komisyon (%${pr.commission_rate_percent}) + KDV</span>
+            <strong class="text-sky-300 text-sm">${pr.commission_amount_tl.toFixed(2)} TL / ${pr.final_vat_tl.toFixed(2)} TL</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 block">🏦 Banka Stopajı (-%${pr.bank_withholding_rate_percent || 0})</span>
+            <strong class="text-amber-300 text-sm">-${(pr.bank_withholding_amount_tl || 0).toFixed(2)} TL</strong>
+            <span class="text-[10px] text-slate-400 block">Banka Net: ${(pr.bank_net_payout_tl || 0).toFixed(2)} TL</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">Cebe Kalan Net Kâr</span>
+            <strong class="text-emerald-400 text-base">${pr.net_profit_tl.toFixed(2)} TL (%${pr.actual_margin_percent})</strong>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderInventory() {
+      document.getElementById('filaments-table').innerHTML = STATE.filaments.map(f => `
+        <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <span class="w-4 h-4 rounded-full border border-white/20" style="background:${f.color_hex}"></span>
+            <div>
+              <div class="font-semibold text-white">${f.brand} ${f.material_type} — ${f.color_name} <span class="text-slate-400 font-mono">(${f.code})</span></div>
+              <div class="text-[11px] text-slate-400">Alış: ${f.price_per_kg_tl} TL/kg (<strong>${f.cost_per_gram_tl} TL/gr</strong>)</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <div class="font-bold ${f.remaining_weight_gr <= f.min_stock_alert_gr ? 'text-rose-400' : 'text-emerald-400'}">${f.remaining_weight_gr} gr</div>
+              <div class="text-[10px] text-slate-400">Kalan Stok</div>
+            </div>
+            <button onclick="deleteItem('/api/filaments/${f.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('materials-table').innerHTML = STATE.materials.map(m => `
+        <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between gap-2">
+          <div>
+            <div class="font-semibold text-white">${m.name} <span class="text-slate-400 font-mono">(${m.code})</span></div>
+            <div class="text-[11px] text-slate-400">Kategori: ${m.category} | Birim Maliyet: <strong>${m.unit_cost_tl.toFixed(2)} TL / ${m.unit}</strong></div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <div class="font-bold ${m.stock_quantity <= m.min_stock_alert ? 'text-rose-400' : 'text-emerald-400'}">${m.stock_quantity} ${m.unit}</div>
+              <div class="text-[10px] text-slate-400">Mevcut Stok</div>
+            </div>
+            <button onclick="deleteItem('/api/materials/${m.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+          </div>
+        </div>
+      `).join('');
+
+      const groupsListEl = document.getElementById('material-groups-list');
+      if (groupsListEl) {
+        groupsListEl.innerHTML = STATE.materialGroups.length
+          ? STATE.materialGroups.map(g => {
+            const itemsHtml = (g.items || []).map(it =>
+              `<div class="flex justify-between text-[11px] text-slate-300">
+                <span>• ${it.material_name} (${it.quantity} ${it.unit}${it.waste_rate_percent > 0 ? `, +%${it.waste_rate_percent} fire` : ''})</span>
+                <span class="font-mono text-slate-400">${it.line_cost_tl.toFixed(2)} TL</span>
+              </div>`
+            ).join('');
+            return `
+              <div class="p-3 rounded-lg bg-slate-800 border border-amber-500/30 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <div class="font-bold text-amber-300 font-mono text-xs">${g.code}</div>
+                    <div class="font-semibold text-white text-sm">${g.name}</div>
+                    ${g.description ? `<div class="text-[11px] text-slate-400">${g.description}</div>` : ''}
+                  </div>
+                  <div class="text-right shrink-0">
+                    <div class="font-bold text-emerald-400 text-sm">${Number(g.unit_cost_tl || 0).toFixed(2)} TL</div>
+                    <div class="text-[10px] text-slate-400">Set Maliyeti</div>
+                  </div>
+                </div>
+                <div class="pt-1 border-t border-slate-700/70 space-y-0.5">${itemsHtml || '<div class="text-[11px] text-slate-500">Malzeme satırı yok</div>'}</div>
+                <div class="flex justify-end gap-2 pt-1">
+                  <button type="button" onclick="editMaterialGroup(${g.id})" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs text-slate-200">✏️ Düzenle</button>
+                  <button type="button" onclick="deleteItem('/api/material-groups/${g.id}')" class="px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900 text-xs text-rose-300 font-bold">✕ Sil</button>
+                </div>
+              </div>
+            `;
+          }).join('')
+          : `<div class="col-span-2 p-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400">Henüz tanımlı ambalaj / malzeme grubu yok.</div>`;
+      }
+    }
+
+    function addGroupItemRow(selectedId = null, qty = 1, wastePct = 0) {
+      const container = document.getElementById('grp-items-container');
+      if (!container) return;
+      if (!STATE.materials.length) {
+        alert('Önce sol üstten yardımcı malzeme (kutu, dolgu, etiket vb.) ekleyin.');
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'grid grid-cols-12 gap-1.5 items-center grp-item-row';
+      const opts = STATE.materials.map(m =>
+        `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${m.name} (${m.unit_cost_tl} TL/${m.unit})</option>`
+      ).join('');
+      row.innerHTML = `
+        <select class="col-span-6 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 grp-m-id">${opts}</select>
+        <input type="number" step="0.1" min="0.01" value="${qty}" class="col-span-3 px-2 py-1.5 rounded bg-slate-900 border border-slate-700 grp-m-qty" placeholder="Miktar" title="Miktar" />
+        <input type="number" step="0.5" min="0" value="${wastePct}" class="col-span-2 px-2 py-1.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300 grp-m-waste" placeholder="Fire %" title="Fire (%)" />
+        <button type="button" onclick="this.parentElement.remove()" class="col-span-1 text-rose-400 hover:text-rose-300 font-bold text-center">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function resetMaterialGroupForm() {
+      const form = document.getElementById('material-group-form');
+      if (form) form.reset();
+      const container = document.getElementById('grp-items-container');
+      if (container) {
+        container.innerHTML = '';
+        if (STATE.materials.length > 0) addGroupItemRow(STATE.materials[0].id, 1, 0);
+      }
+    }
+
+    function editMaterialGroup(groupId) {
+      const g = STATE.materialGroups.find(x => x.id === groupId);
+      if (!g) return;
+      document.getElementById('grp-code').value = g.code;
+      document.getElementById('grp-name').value = g.name;
+      document.getElementById('grp-desc').value = g.description || '';
+      const container = document.getElementById('grp-items-container');
+      container.innerHTML = '';
+      (g.items || []).forEach(it => addGroupItemRow(it.material_id, it.quantity, it.waste_rate_percent || 0));
+      if ((g.items || []).length === 0 && STATE.materials.length > 0) addGroupItemRow(STATE.materials[0].id, 1, 0);
+      document.getElementById('material-group-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async function submitMaterialGroup(e) {
+      e.preventDefault();
+      const items = [...document.querySelectorAll('.grp-item-row')].map(r => ({
+        material_id: parseInt(r.querySelector('.grp-m-id').value, 10),
+        quantity: parseFloat(r.querySelector('.grp-m-qty').value || '1'),
+        waste_rate_percent: parseFloat(r.querySelector('.grp-m-waste').value || '0'),
+      }));
+      if (!items.length) {
+        alert('Gruba en az 1 malzeme satırı ekleyin.');
+        return;
+      }
+      const res = await fetch('/api/material-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: document.getElementById('grp-code').value.trim(),
+          name: document.getElementById('grp-name').value.trim(),
+          category: 'AMBALAJ_GRUBU',
+          description: document.getElementById('grp-desc').value.trim() || null,
+          items,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Malzeme grubu kaydedilemedi.');
+        return;
+      }
+      resetMaterialGroupForm();
+      await loadAllData();
+    }
+
+    function renderMachines() {
+      document.getElementById('machines-detail-list').innerHTML = STATE.machines.map(m => {
+        const cb = m.cost_breakdown;
+        const partsHtml = cb.parts.map(pt => `
+          <div class="p-2.5 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+            <div>
+              <div class="font-semibold text-white">${pt.name}</div>
+              <div class="text-[11px] text-slate-400">
+                Bedel: ${pt.cost_tl} TL | Ömür: ${pt.lifespan_hours}s | Kullanılan: <strong>${pt.used_hours}s (%${pt.usage_percent})</strong> | Yıpranma: <strong>${pt.hourly_wear_tl.toFixed(2)} TL/s</strong>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="resetPart(${pt.id})" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold">
+                🔄 Bakım Yapıldı (Sıfırla)
+              </button>
+              <button onclick="deleteItem('/api/machine-parts/${pt.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+            </div>
+          </div>
+        `).join('');
+
+        return `
+          <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h4 class="font-bold text-base text-white">${m.name} <span class="text-xs text-slate-400">(${m.brand_model})</span></h4>
+                <div class="text-xs text-slate-400">Alış: ${m.purchase_price_tl} TL | Ömür: ${m.lifespan_hours} saat | Tüketim: ${m.power_consumption_kw} kW | Çalışma: ${m.total_worked_hours} saat</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="text-right">
+                  <div class="text-lg font-extrabold text-indigo-400">${cb.total_hourly_cost_tl.toFixed(2)} TL / saat</div>
+                  <div class="text-[11px] text-slate-400">Saatlik Toplam Gider</div>
+                </div>
+                <button onclick="deleteItem('/api/machines/${m.id}', 'Makine ve parçaları kalıcı olarak silinecek. Emin misiniz?')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+              </div>
+            </div>
+            <div class="space-y-1.5 p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/80 text-xs">
+              <div class="flex items-center justify-between gap-2 pb-1 border-b border-slate-800">
+                <span class="font-semibold text-amber-300">🧵 Filament Yuvaları</span>
+                <div class="flex items-center gap-1.5">
+                  <label class="text-slate-400">Yuva Sayısı:</label>
+                  <select onchange="makineYuvaSayisiYaz(${m.id}, this.value)" class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-bold text-white">
+                    ${[1, 2, 3, 4].map(n => `<option value="${n}" ${(m.filament_slot_sayisi || 4) === n ? 'selected' : ''}>${n} Slot</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                ${Array.from({ length: Math.max(1, Math.min(4, m.filament_slot_sayisi || 4)) }, (_, idx) => {
+                  const slotNo = idx + 1;
+                  const slotIds = [m.yuklu_filament_id, m.yuklu_filament_2_id, m.yuklu_filament_3_id, m.yuklu_filament_4_id];
+                  const seciliId = slotIds[idx];
+                  return `
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[11px] font-mono text-slate-400 w-12 shrink-0">Yuva ${slotNo}:</span>
+                      <select onchange="yukluFilamentYaz(${m.id}, this.value, ${slotNo})" class="flex-1 min-w-0 px-2 py-1 rounded bg-slate-800 border border-slate-700">
+                        <option value="">Boş / Kayıtlı değil</option>
+                        ${STATE.filaments.map(f => `<option value="${f.id}" ${seciliId === f.id ? 'selected' : ''}>${f.brand} ${f.material_type} ${f.color_name} (${f.remaining_weight_gr} g)</option>`).join('')}
+                      </select>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+            <div class="space-y-2">${partsHtml}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function yukluFilamentYaz(machineId, deger, slot = 1) {
+      const res = await fetch(`/api/machines/${machineId}/yuklu-filament`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, filament_id: deger ? parseInt(deger, 10) : null }),
+      });
+      if (!res.ok) alert('Yüklü filament kaydedilemedi.');
+      await loadAllData();
+    }
+
+    async function makineYuvaSayisiYaz(machineId, slotSayisi) {
+      const res = await fetch(`/api/machines/${machineId}/yuklu-filament`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filament_slot_sayisi: parseInt(slotSayisi, 10) }),
+      });
+      if (!res.ok) alert('Filament yuva sayısı güncellenemedi.');
+      await loadAllData();
+    }
+
+    const EMIR_DURUM_ADI = {
+      BEKLIYOR: 'Bekliyor', ONAY_BEKLIYOR: 'Müşteri onayı bekliyor', DILIM_BEKLIYOR: 'Dilimleme bekliyor',
+      BASILIYOR: 'Basılıyor', HATA: 'Hata', TAMAMLANDI: 'Tamamlandı', IPTAL: 'İptal',
+    };
+
+    function emirDugmeleri(e) {
+      const d = (ad, cagri) => `<button onclick="${cagri}" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold">${ad}</button>`;
+      const b = [];
+      if (e.status === 'ONAY_BEKLIYOR') b.push(d('Müşteri onayladı', `istasyonIstek('/api/queue/${e.id}/musteri-onayi')`));
+      if (e.status === 'DILIM_BEKLIYOR') b.push(d('G-code bağla', `emirGcodeBagla(${e.id})`));
+      if (e.status === 'BEKLIYOR') b.push(d('Baskı başladı', `istasyonIstek('/api/queue/${e.id}/baskiya-al')`));
+      if (e.status === 'BEKLIYOR' || e.status === 'BASILIYOR') b.push(d('Basıldı', `emirTamamla(${e.id})`));
+      if (e.status === 'BASILIYOR' || e.status === 'HATA') b.push(d('Baskı başarısız', `emirHata(${e.id})`));
+      if (['BEKLIYOR', 'ONAY_BEKLIYOR', 'DILIM_BEKLIYOR'].includes(e.status)) b.push(d('İptal', `emirIptal(${e.id})`));
+      return b.join(' ');
+    }
+
+    function renderQueue() {
+      const acik = STATE.queue.filter(e => !['TAMAMLANDI', 'IPTAL'].includes(e.status));
+      document.getElementById('queue-list').innerHTML = acik.length
+        ? acik.map(e => `
+          <div class="p-3 rounded-lg bg-slate-800 border border-slate-700 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-bold text-white">Emir ${e.id} — ${e.sku} ${e.urun} (x${e.quantity})</div>
+              <div class="text-[11px] font-semibold text-amber-300">${EMIR_DURUM_ADI[e.status] || e.status}</div>
+            </div>
+            ${e.ozel_metin ? `<div class="text-[11px] text-slate-300">Metin: <strong>${e.ozel_metin}</strong></div>` : ''}
+            ${e.notes ? `<div class="text-[11px] text-slate-400">${e.notes}</div>` : ''}
+            <div class="flex flex-wrap gap-1.5">${emirDugmeleri(e)}</div>
+          </div>
+        `).join('')
+        : `<div class="text-slate-400 p-3">Kuyrukta açık emir yok.</div>`;
+    }
+
+    async function submitQueueItem(ev) {
+      ev.preventDefault();
+      const veri = await istasyonIstek('/api/queue', {
+        product_id: parseInt(document.getElementById('q-product').value, 10),
+        quantity: parseInt(document.getElementById('q-qty').value, 10),
+        ozel_metin: document.getElementById('q-metin').value || null,
+        notes: document.getElementById('q-notes').value || null,
+      });
+      if (veri) ev.target.reset();
+    }
+
+    async function emirTamamla(id) {
+      if (confirm('Baskı bitti: stok ve makine saati düşülecek. Emin misiniz?')) await istasyonIstek(`/api/queue/${id}/tamamla`);
+    }
+
+    async function emirIptal(id) {
+      const neden = prompt('İptal nedeni:');
+      if (neden) await istasyonIstek(`/api/queue/${id}/iptal`, { neden });
+    }
+
+    async function emirGcodeBagla(id) {
+      const yol = prompt('Bu emir için dilimlediğiniz G-code dosyasının tam yolu:');
+      if (yol) await istasyonIstek(`/api/queue/${id}/gcode-bagla`, { gcode_yolu: yol.trim() });
+    }
+
+    async function emirHata(id) {
+      const gram = parseFloat(prompt('Harcanan filament (gram):', '0'));
+      if (Number.isNaN(gram)) return;
+      const dakika = parseInt(prompt('Geçen süre (dakika):', '0'), 10);
+      if (Number.isNaN(dakika)) return;
+      await istasyonIstek(`/api/queue/${id}/hata`, { gram, saat: Math.floor(dakika / 60), dakika: dakika % 60 });
+    }
+
+    function renderOrders() {
+      document.getElementById('orders-list').innerHTML = STATE.orders.length
+        ? STATE.orders.map(o => `
+          <div class="p-3 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">${o.order_code} — ${o.product_name_snapshot} (x${o.quantity})</div>
+              <div class="text-[11px] text-slate-400">
+                Süre: ${o.total_print_hours_decimal} saat | Filament: ${o.total_filament_used_gr} gr | Snapshot Kargo: ${o.snapshot_shipping_cost_tl} TL | ${o.vat_enabled ? `KDV %${o.vat_rate_percent}` : 'KDV Yok'}
+              </div>
+              ${(o.snapshot_bank_withholding_rate_percent > 0 || o.bank_withholding_amount_tl > 0) ? `
+                <div class="text-[11px] text-emerald-300/90 mt-0.5">
+                  🏦 Banka Gelen: ${Number(o.bank_incoming_tl || 0).toFixed(2)} TL | Stopaj (%${Number(o.snapshot_bank_withholding_rate_percent || 0)}): -${Number(o.bank_withholding_amount_tl || 0).toFixed(2)} TL → Net Banka: <strong>${Number(o.bank_net_payout_tl || 0).toFixed(2)} TL</strong>
+                </div>
+              ` : ''}
+            </div>
+            <div class="text-right">
+              <div class="font-bold text-sm text-sky-400">Hasılat: ${o.total_revenue_tl.toFixed(2)} TL</div>
+              <div class="font-bold text-xs text-emerald-400">Net Kâr: +${o.total_net_profit_tl.toFixed(2)} TL</div>
+            </div>
+          </div>
+        `).join('')
+        : `<div class="text-slate-400 p-3">Henüz tamamlanmış sipariş üretimi kaydı yok.</div>`;
+    }
+
+    function renderSavedQuotes() {
+      document.getElementById('saved-quotes-list').innerHTML = STATE.quotes.length
+        ? STATE.quotes.map(q => `
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-between gap-2">
+            <div>
+              <div class="font-semibold text-white">${q.quote_code} — ${q.customer_name}</div>
+              <div class="text-[11px] text-slate-400">${q.project_title} | ${q.quantity} adet</div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="font-bold text-sky-400">${q.final_offer_total_tl.toFixed(2)} TL</div>
+              <button onclick="deleteItem('/api/quotes/${q.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+            </div>
+          </div>
+        `).join('')
+        : `<div class="text-slate-400">Henüz kayıtlı teklif yok.</div>`;
+    }
+
+    async function submitFilament(e) {
+      e.preventDefault();
+      await fetch('/api/filaments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: document.getElementById('f-code').value,
+          brand: document.getElementById('f-brand').value,
+          material_type: document.getElementById('f-type').value,
+          color_name: document.getElementById('f-color').value,
+          price_per_kg_tl: parseFloat(document.getElementById('f-price').value),
+          remaining_weight_gr: parseFloat(document.getElementById('f-rem').value),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function submitMaterial(e) {
+      e.preventDefault();
+      await fetch('/api/materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: document.getElementById('m-code').value,
+          name: document.getElementById('m-name').value,
+          category: document.getElementById('m-cat').value,
+          unit: document.getElementById('m-unit').value,
+          unit_cost_tl: parseFloat(document.getElementById('m-cost').value),
+          stock_quantity: parseFloat(document.getElementById('m-stock').value),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function submitMachine(e) {
+      e.preventDefault();
+      await fetch('/api/machines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: document.getElementById('mac-name').value,
+          brand_model: document.getElementById('mac-model').value,
+          purchase_price_tl: parseFloat(document.getElementById('mac-price').value),
+          lifespan_hours: parseFloat(document.getElementById('mac-life').value),
+          power_consumption_kw: parseFloat(document.getElementById('mac-kw').value),
+          filament_slot_sayisi: parseInt(document.getElementById('mac-slots')?.value || '4', 10),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function submitMachinePart(e) {
+      e.preventDefault();
+      await fetch('/api/machine-parts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          machine_id: parseInt(document.getElementById('mp-machine').value, 10),
+          name: document.getElementById('mp-name').value,
+          cost_tl: parseFloat(document.getElementById('mp-cost').value),
+          lifespan_hours: parseFloat(document.getElementById('mp-life').value),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    async function resetPart(partId) {
+      await fetch(`/api/machine-parts/${partId}/reset`, { method: 'POST' });
+      await loadAllData();
+    }
+
+    async function submitProductionOrder(e) {
+      e.preventDefault();
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_type: 'PRODUCTION',
+          channel: 'IKAS_B2C',
+          product_id: parseInt(document.getElementById('ord-product').value, 10),
+          machine_id: parseInt(document.getElementById('ord-machine').value, 10),
+          quantity: parseInt(document.getElementById('ord-qty').value, 10),
+          vat_enabled: document.getElementById('ord-vat').checked,
+          notes: document.getElementById('ord-notes').value,
+        }),
+      });
+      if (!res.ok) {
+        const hata = await res.json().catch(() => ({}));
+        alert(hata.detail || 'Üretim kaydı oluşturulamadı.');
+      }
+      await loadAllData();
+    }
+
+    async function submitSettings(e) {
+      e.preventDefault();
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand_name: document.getElementById('set-brand').value,
+          electricity_price_per_kwh: parseFloat(document.getElementById('set-elec').value),
+          commission_rate_percent: parseFloat(document.getElementById('set-comm').value),
+          esnaf_muafiyeti_enabled: document.getElementById('set-esnaf-enabled').checked,
+          bank_withholding_rate_percent: parseFloat(document.getElementById('set-stopaj').value || '4'),
+          esnaf_yillik_limit_tl: parseFloat(document.getElementById('set-esnaf-limit').value || '1900000'),
+          default_shipping_cost: parseFloat(document.getElementById('set-ship').value),
+          kargo_esigi_tl: parseFloat(document.getElementById('set-kargo-esik').value || '0'),
+          default_vat_rate_percent: parseFloat(document.getElementById('set-vat-rate').value),
+          default_vat_enabled: STATE.settings.default_vat_enabled,
+          default_target_margin_percent: parseFloat(document.getElementById('set-margin').value),
+          default_b2b_margin_percent: STATE.settings.default_b2b_margin_percent,
+        }),
+      });
+      await loadAllData();
+    }
+
+    async function submitShippingRate(e) {
+      e.preventDefault();
+      await fetch('/api/shipping-rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier_name: document.getElementById('sr-name').value,
+          cost_tl: parseFloat(document.getElementById('sr-cost').value),
+        }),
+      });
+      e.target.reset();
+      await loadAllData();
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadAllData();
+      updateDecimalPreview();
+    });
+  </script>
+</body>
+</html>

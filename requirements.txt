@@ -1,0 +1,8 @@
+# Runtime dependencies (loose). For the exact, tested versions use requirements.lock.
+fastapi
+uvicorn
+sqlmodel
+sqlalchemy
+pydantic
+python-multipart
+mcp

@@ -1,0 +1,14 @@
+# Local environment and data (never commit)
+.venv/
+.env
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+__pycache__/
+.pytest_cache/
+*.pyc
+deb_build/
+*.bak
