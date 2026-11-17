@@ -1,5 +1,7 @@
 # 3D Printer Open Workbench ERP
 
+> 3D Printer Open Workbench: [Bot + agents](https://github.com/3d-printer-open-workbench/3d-printer-open-workbench-bot) · **ERP** · [Studio](https://github.com/3d-printer-open-workbench/3d-printer-open-workbench-studio)
+
 A small, self-hosted ERP for a 3D-printing workshop: it knows what your filament and parts cost,
 what each print really costs from its G-code, what you should charge for it, and what is in the
 print queue. It runs on one machine (FastAPI + SQLite), has a web UI, a REST API and an

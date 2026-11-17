@@ -1,5 +1,7 @@
 # 3D Printer Open Workbench ERP
 
+> 3D Printer Open Workbench ailesi: [Bot + ajanlar](https://github.com/3d-printer-open-workbench/3d-printer-open-workbench-bot) · **ERP** · [Studio](https://github.com/3d-printer-open-workbench/3d-printer-open-workbench-studio)
+
 3B baskı atölyesi için küçük, kendi bilgisayarınızda çalışan bir ERP: filamentin ve parçaların
 maliyetini, her baskının G-code'a göre gerçek maliyetini, ne kadara satılması gerektiğini ve baskı
 kuyruğunda ne olduğunu bilir. Tek makinede çalışır (FastAPI + SQLite); web arayüzü, REST API ve
